@@ -55,6 +55,91 @@ const Profile: React.FC = () => {
   const recentGames = useMemo(() => {
     try { return storage.getGames().sort((a,b)=>b.updatedAt-a.updatedAt).slice(0,10); } catch { return [] as GameMeta[]; }
   }, [gamesVersion]);
+  const currentGameId = useMemo(() => storage.getCurrentId(), [gamesVersion]);
+  const currentRolls = useMemo(() => {
+    const id = storage.getCurrentId();
+    if (!id) return [] as DiceRollEntry[];
+    return storage.getData(id).rolls || [];
+  }, [gamesVersion]);
+
+  // Preferences
+  const [prefStartInLastPlayers, setPrefStartInLastPlayers] = useState<boolean>(() => {
+    try { return localStorage.getItem('pref_start_last_players') === '1'; } catch { return true; }
+  });
+  const [prefNoAdjacent68, setPrefNoAdjacent68] = useState<boolean>(() => {
+    try { return localStorage.getItem('pref_no_adjacent_6_8') === '1'; } catch { return false; }
+  });
+  const [prefColorblindPips, setPrefColorblindPips] = useState<boolean>(() => {
+    try { return localStorage.getItem('pref_colorblind_pips') === '1'; } catch { return false; }
+  });
+  const [prefReduceMotion, setPrefReduceMotion] = useState<boolean>(() => {
+    try { return localStorage.getItem('pref_reduce_motion') === '1'; } catch { return false; }
+  });
+  useEffect(() => { try { localStorage.setItem('pref_start_last_players', prefStartInLastPlayers ? '1' : '0'); } catch {} }, [prefStartInLastPlayers]);
+  useEffect(() => { try { localStorage.setItem('pref_no_adjacent_6_8', prefNoAdjacent68 ? '1' : '0'); } catch {} }, [prefNoAdjacent68]);
+  useEffect(() => { try { localStorage.setItem('pref_colorblind_pips', prefColorblindPips ? '1' : '0'); } catch {} }, [prefColorblindPips]);
+  useEffect(() => { try { localStorage.setItem('pref_reduce_motion', prefReduceMotion ? '1' : '0'); } catch {} }, [prefReduceMotion]);
+  
+
+  // Quick actions
+  const exportCurrentAsJSON = () => {
+    if (!currentGameId) return;
+    const data = storage.getData(currentGameId);
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `dice-tracker-${currentGameId}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+  const exportCurrentAsCSV = () => {
+    if (!currentGameId) return;
+    const data = storage.getData(currentGameId).rolls || [];
+    const rows = [['id','timestamp','total','source','dieA','dieB']].concat(
+      data.map(r => [r.id, new Date(r.ts).toISOString(), String(r.total), r.source, String(r.dice?.[0] ?? ''), String(r.dice?.[1] ?? '')])
+    );
+    const csv = rows.map(r => r.map(x => `"${String(x).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `dice-tracker-${currentGameId}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+  const clearCurrentGame = () => {
+    if (!currentGameId) return;
+    if (!confirm('Clear all rolls in the current game?')) return;
+    storage.saveData(currentGameId, { rolls: [] });
+    setGamesVersion(v=>v+1);
+  };
+  const clearAllGames = () => {
+    if (!confirm('Delete all saved games and rolls?')) return;
+    const games = storage.getGames();
+    games.forEach(g => localStorage.removeItem(storage.dataKey(g.id)));
+    localStorage.removeItem('dice_tracker_games');
+    localStorage.removeItem('dice_tracker_current_game_id');
+    // create a fresh one
+    const meta = storage.createGame(new Date().toLocaleString());
+    setGameName(meta.name);
+    setGamesVersion(v=>v+1);
+  };
+
+  // Simple stats
+  const totalRolls = currentRolls.length;
+  const mostFreq = useMemo(() => {
+    const cnt: Record<number, number> = {};
+    for (let i=2;i<=12;i++) cnt[i]=0;
+    currentRolls.forEach(r => { if (r.total>=2 && r.total<=12) cnt[r.total]++; });
+    let best = 2; let bestC = 0;
+    for (let i=2;i<=12;i++) if (cnt[i] > bestC) { bestC = cnt[i]; best = i; }
+    return bestC>0 ? `${best} (${bestC})` : '—';
+  }, [currentRolls]);
+  const elapsed = useMemo(() => {
+    if (currentRolls.length < 2) return '—';
+    const ms = currentRolls[currentRolls.length-1].ts - currentRolls[0].ts;
+    const m = Math.floor(ms/60000); const s = Math.floor((ms%60000)/1000);
+    return m>0 ? `${m}m ${s}s` : `${s}s`;
+  }, [currentRolls]);
   const startNewGame = () => {
     const meta = storage.createGame(new Date().toLocaleString());
     setGameName(meta.name); setGamesVersion(v=>v+1);
@@ -93,42 +178,94 @@ const Profile: React.FC = () => {
           </h1>
         </div>
 
-        {/* Primary actions */}
-        <div className="px-5 mt-4 space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <button className="w-full h-12 rounded-xl text-sm font-medium shadow-2xl bg-gradient-to-br from-[#2E1371] to-[#21232F] text-white relative"
-              style={{ boxShadow: '-1px -1px 0px 0px rgb(7, 251, 211), 0px -1px 0px 0px rgb(7, 251, 211)' }}>
-                History
-              </button>
+        {/* Current game hero */}
+        <div className="px-5 mt-3">
+          <LiquidGlassCard className="w-full rounded-2xl p-4" style={{ borderRadius: '1rem' }}>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm text-white/70">Current game</div>
+                <div className="text-lg font-semibold">{gameName}</div>
+                <div className="mt-2 flex gap-4 text-xs text-white/70">
+                  <div><span className="text-white/90">{totalRolls}</span> rolls</div>
+                  <div>Most freq: <span className="text-white/90">{mostFreq}</span></div>
+                  <div>Elapsed: <span className="text-white/90">{elapsed}</span></div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={()=>navigate('/tracker')} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-sm">Continue</button>
+                <button onClick={startNewGame} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-sm">New</button>
+                <button onClick={()=>setMenuOpen(true)} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-sm">Load</button>
+              </div>
             </div>
-            <div>
-            <button className="w-full h-12 rounded-xl text-sm font-medium shadow-2xl bg-gradient-to-br from-[#2E1371] to-[#21232F] text-white relative"
-              style={{ boxShadow: '-1px -1px 0px 0px rgb(7, 251, 211), 0px -1px 0px 0px rgb(7, 251, 211)' }}>
-                Settings
-              </button>
-            </div>
-          </div>
+          </LiquidGlassCard>
+        </div>
+
+        {/* Quick actions */}
+        <div className="px-5 mt-3 grid grid-cols-2 gap-3">
+          <button onClick={exportCurrentAsCSV} className="h-12 rounded-xl text-sm font-medium shadow-2xl bg-gradient-to-br from-[#2E1371] to-[#21232F] text-white" style={{ boxShadow: '-1px -1px 0px 0px rgb(7, 251, 211), 0px -1px 0px 0px rgb(7, 251, 211)' }}>Export CSV</button>
+          <button onClick={exportCurrentAsJSON} className="h-12 rounded-xl text-sm font-medium shadow-2xl bg-gradient-to-br from-[#2E1371] to-[#21232F] text-white" style={{ boxShadow: '-1px -1px 0px 0px rgb(7, 251, 211), 0px -1px 0px 0px rgb(7, 251, 211)' }}>Export JSON</button>
+          <button onClick={clearCurrentGame} className="h-12 rounded-xl text-sm font-medium shadow-2xl bg-gradient-to-br from-[#2E1371] to-[#21232F] text-white" style={{ boxShadow: '-1px -1px 0px 0px rgb(7, 251, 211), 0px -1px 0px 0px rgb(7, 251, 211)' }}>Clear Current</button>
+          <button onClick={clearAllGames} className="h-12 rounded-xl text-sm font-medium shadow-2xl bg-gradient-to-br from-[#2E1371] to-[#21232F] text-white" style={{ boxShadow: '-1px -1px 0px 0px rgb(7, 251, 211), 0px -1px 0px 0px rgb(7, 251, 211)' }}>Clear All</button>
         </div>
 
         {/* Summary cards */}
         <div className="px-5 mt-6 grid grid-cols-2 gap-3">
-          <div>
-            <div className="p-4 rounded-xl text-sm font-medium shadow-2xl bg-gradient-to-br from-[#2E1371] to-[#21232F] text-white relative"
-              style={{ boxShadow: '-1px -1px 0px 0px rgb(7, 251, 211), 0px -1px 0px 0px rgb(7, 251, 211)' }}>
-              <div className="text-xs text-white/80">Last Session</div>
-              <div className="mt-2 text-xl font-semibold">12 rolls</div>
-              <div className="text-xs text-white/70">Avg: 3.8</div>
+          <div className="p-4 rounded-xl text-sm font-medium shadow-2xl bg-gradient-to-br from-[#2E1371] to-[#21232F] text-white" style={{ boxShadow: '-1px -1px 0px 0px rgb(7, 251, 211), 0px -1px 0px 0px rgb(7, 251, 211)' }}>
+            <div className="text-xs text-white/80">Current session</div>
+            <div className="mt-2 text-xl font-semibold">{totalRolls} rolls</div>
+            <div className="text-xs text-white/70">Most frequent: {mostFreq}</div>
+            <div className="text-xs text-white/70">Elapsed: {elapsed}</div>
+          </div>
+          <div className="p-4 rounded-xl text-sm font-medium shadow-2xl bg-gradient-to-br from-[#2E1371] to-[#21232F] text-white" style={{ boxShadow: '-1px -1px 0px 0px rgb(7, 251, 211), 0px -1px 0px 0px rgb(7, 251, 211)' }}>
+            <div className="text-xs text-white/80">Distribution (2–12)</div>
+            <div className="mt-2 flex items-end gap-1 h-16">
+              {(() => {
+                const counts: number[] = Array.from({ length: 11 }, (_, i) => currentRolls.filter(r => r.total === (i+2)).length);
+                const max = Math.max(1, ...counts);
+                const BAR_PX_TOTAL = 64; // h-16
+                return counts.map((c, idx) => {
+                  const barPx = Math.max(2, Math.round((c / max) * BAR_PX_TOTAL));
+                  const n = idx + 2;
+                  return (
+                    <div key={n} className="flex-1 flex flex-col items-center justify-end">
+                      <div className="relative w-full" style={{ height: `${BAR_PX_TOTAL}px` }}>
+                        <div className="absolute bottom-0 left-0 right-0 rounded-t-md bg-gradient-to-t from-white/20 to-white/60" style={{ height: `${barPx}px` }} />
+                      </div>
+                      <div className="text-[10px] text-white/70 mt-1">{n}</div>
+                    </div>
+                  );
+                });
+              })()}
             </div>
           </div>
-          <div>
-          <div className="p-4 rounded-xl text-sm font-medium shadow-2xl bg-gradient-to-br from-[#2E1371] to-[#21232F] text-white relative"
-              style={{ boxShadow: '-1px -1px 0px 0px rgb(7, 251, 211), 0px -1px 0px 0px rgb(7, 251, 211)' }}>
-              <div className="text-xs text-white/80">Best Streak</div>
-              <div className="mt-2 text-xl font-semibold">4 in a row</div>
-              <div className="text-xs text-white/70">High: 6</div>
-            </div>
-          </div>
+        </div>
+
+        {/* Map presets */}
+        <div className="px-5 mt-6 grid grid-cols-3 gap-3">
+          {[4,5,6].map(p => {
+            const key = `catan_map_${p}p`;
+            let saved = false;
+            try { const raw = localStorage.getItem(key); saved = !!raw; } catch {}
+            return (
+              <div key={p} className="p-4 rounded-xl text-sm font-medium shadow-2xl bg-gradient-to-br from-[#2E1371] to-[#21232F] text-white" style={{ boxShadow: '-1px -1px 0px 0px rgb(7, 251, 211), 0px -1px 0px 0px rgb(7, 251, 211)' }}>
+                <div className="text-xs text-white/80">Preset</div>
+                <div className="mt-1 text-base font-semibold">{p} players</div>
+                <div className="text-xs text-white/70 mt-1">{saved ? 'Saved' : 'None'}</div>
+                <div className="mt-3 flex gap-2">
+                  <button onClick={()=>{ try { localStorage.setItem('catan_players', String(p)); } catch {} navigate('/home'); }} className="h-8 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Open</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Preferences */}
+        <div className="px-5 mt-6 grid grid-cols-2 gap-3">
+          <label className="flex items-center gap-2 text-xs text-white/80 bg-white/5 border border-white/10 rounded-xl p-3"><input type="checkbox" checked={prefStartInLastPlayers} onChange={e=>setPrefStartInLastPlayers(e.target.checked)} /> Start in last selected players</label>
+          <label className="flex items-center gap-2 text-xs text-white/80 bg-white/5 border border-white/10 rounded-xl p-3"><input type="checkbox" checked={prefNoAdjacent68} onChange={e=>setPrefNoAdjacent68(e.target.checked)} /> Enforce no adjacent 6/8</label>
+          <label className="flex items-center gap-2 text-xs text-white/80 bg-white/5 border border-white/10 rounded-xl p-3"><input type="checkbox" checked={prefColorblindPips} onChange={e=>setPrefColorblindPips(e.target.checked)} /> Colorblind-friendly pips</label>
+          <label className="flex items-center gap-2 text-xs text-white/80 bg-white/5 border border-white/10 rounded-xl p-3"><input type="checkbox" checked={prefReduceMotion} onChange={e=>setPrefReduceMotion(e.target.checked)} /> Reduce motion</label>
+          
         </div>
 
         <div className="px-5 mt-4 space-y-3">
@@ -145,8 +282,8 @@ const Profile: React.FC = () => {
         <div className="absolute bottom-0 left-0 right-0 h-[64px] z-[1]" style={{ boxSizing: 'border-box' }}>
           <div className="absolute inset-0 z-[1] overflow-hidden" style={{ background: 'rgba(255, 255, 255, 0.6)', backgroundBlendMode: 'overlay', boxSizing: 'border-box' }} >
             <div className="absolute w-[200px] h-[231px] left-[-45px] top-[-148px] z-[4]" style={{ background: '#3B1578', filter: 'blur(40px)' }} />
-            <div className="absolute w-[200px] h-[231px] left-[86px] top-[12px] z-[2]" style={{ background: '#5172B3', filter: 'blur(60px)' }} />
-            <div className="absolute w-[200px] h-[231px] left-[234px] top-[17px] z-[3]" style={{ background: '#FF53C0', filter: 'blur(60px)' }} />
+            <div className="absolute w-[200px] h-[231px] left-[50%] translate-x-[-50%] top-[12px] z-[2]" style={{ background: '#5172B3', filter: 'blur(60px)' }} />
+            <div className="absolute w-[200px] h-[231px] right-[4px] top-[17px] z-[3]" style={{ background: '#FF53C0', filter: 'blur(60px)' }} />
           </div>
 
 

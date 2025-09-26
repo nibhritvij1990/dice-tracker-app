@@ -74,13 +74,31 @@ const Home: React.FC = () => {
   const loadGame = (id: string) => {
     storage.setCurrentId(id); setGamesVersion(v=>v+1); navigate('/tracker');
   };
-  const rows = [3,4,5,4,3];
-  const numberOrder = [5,2,6,3,8,10,9,12,11,4,8,10,9,4,5,6,3,11];
+  const rows4 = [3,4,5,4,3];
+  const numberOrder4 = [5,2,6,3,8,10,9,12,11,4,8,10,9,4,5,6,3,11];
+  // 5-player specs
+  const columns5 = [4,5,6,5,4]; // heights per column (flat-top columns)
+  const numberOrder5 = [2,5,4,6,3,9,8,11,11,10,6,3,8,4,8,10,11,12,10,5,4,9,5];
+  const spiral5: Array<[number, number]> = [
+    [0,0],[1,0],[2,0],[3,0],[4,0],[4,1],[4,2],[4,3],[3,4],[2,5],[1,4],[0,3],[0,2],[0,1],[1,1],[2,1],[3,1],[3,2],[3,3],[2,4],[1,3],[1,2],[2,2],[2,3]
+  ];
+
+  // 6-player specs
+  const columns6 = [3,4,5,6,5,4,3];
+  const numberOrder6 = [2,5,4,6,3,9,8,11,11,10,6,3,8,4,8,10,11,12,10,5,4,9,5,9,12,3,2,6];
+  const spiral6: Array<[number, number]> = [
+    // outer 16
+    [0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0],[6,1],[6,2],[5,3],[4,4],[3,5],[2,4],[1,3],[0,2],[0,1],
+    // inner 10
+    [1,1],[2,1],[3,1],[4,1],[5,1],[5,2],[4,3],[3,4],[2,3],[1,2],
+    // center 4 (corrected)
+    [2,2],[3,2],[4,2],[3,3]
+  ];
 
   function mulberry32(a: number) { return function() { let t = a += 0x6D2B79F5; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
   function shuffle<T>(arr: T[], rand: () => number) { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; }
 
-  function generateBoard(seed: number): Tile[][] {
+  function generateBoard4(seed: number): Tile[][] {
     const rand = mulberry32(seed);
     const bag: Terrain[] = [
       ...Array(4).fill('forest'),
@@ -94,7 +112,7 @@ const Home: React.FC = () => {
 
     const tiles: Tile[][] = [];
     let idx = 0;
-    for (const n of rows) {
+    for (const n of rows4) {
       const row: Tile[] = [];
       for (let i = 0; i < n; i++) row.push({ terrain: bag[idx++], number: null });
       tiles.push(row);
@@ -128,14 +146,77 @@ const Home: React.FC = () => {
       if (!pos) continue;
       const tile = tiles[pos.r][pos.c];
       if (tile.terrain !== 'desert') {
-        tile.number = numberOrder[ni++];
-        if (ni >= numberOrder.length) break;
+        tile.number = numberOrder4[ni++];
+        if (ni >= numberOrder4.length) break;
       }
     }
     return tiles;
   }
 
-  function assignNumbersToExistingBoard(existing: Tile[][]): Tile[][] {
+  function generateBoard5(seed: number): Tile[][] {
+    const rand = mulberry32(seed);
+    // Resource counts: 4 brick (hills), 5 wheat (fields), 5 sheep (pasture), 5 wood (forest), 4 ore (mountains), 1 desert
+    const bag: Terrain[] = [
+      ...Array(5).fill('forest'),
+      ...Array(5).fill('pasture'),
+      ...Array(5).fill('fields'),
+      ...Array(4).fill('hills'),
+      ...Array(4).fill('mountains'),
+      'desert',
+    ];
+    shuffle(bag, rand);
+    // Build columns structure [4,5,6,5,4]
+    const cols: Tile[][] = columns5.map(h => Array.from({ length: h }, () => ({ terrain: 'desert' as Terrain, number: null })));
+    let bi = 0;
+    for (let x = 0; x < cols.length; x++) {
+      for (let y = 0; y < cols[x].length; y++) {
+        cols[x][y] = { terrain: bag[bi++], number: null };
+      }
+    }
+    // Assign numbers along provided spiral coords
+    let ni = 0;
+    for (const [x, y] of spiral5) {
+      const t = cols[x]?.[y];
+      if (!t) continue;
+      if (t.terrain !== 'desert') {
+        t.number = numberOrder5[ni++];
+        if (ni >= numberOrder5.length) break;
+      }
+    }
+    return cols;
+  }
+
+  function generateBoard6(seed: number): Tile[][] {
+    const rand = mulberry32(seed);
+    const bag: Terrain[] = [
+      ...Array(6).fill('forest'),
+      ...Array(6).fill('pasture'),
+      ...Array(6).fill('fields'),
+      ...Array(5).fill('hills'),
+      ...Array(5).fill('mountains'),
+      ...Array(2).fill('desert'),
+    ];
+    shuffle(bag, rand);
+    const cols: Tile[][] = columns6.map(h => Array.from({ length: h }, () => ({ terrain: 'desert' as Terrain, number: null })));
+    let bi = 0;
+    for (let x = 0; x < cols.length; x++) {
+      for (let y = 0; y < cols[x].length; y++) {
+        cols[x][y] = { terrain: bag[bi++], number: null };
+      }
+    }
+    let ni = 0;
+    for (const [x, y] of spiral6) {
+      const t = cols[x]?.[y];
+      if (!t) continue;
+      if (t.terrain !== 'desert') {
+        t.number = numberOrder6[ni++];
+        if (ni >= numberOrder6.length) break;
+      }
+    }
+    return cols;
+  }
+
+  function assignNumbersToExistingBoard4(existing: Tile[][]): Tile[][] {
     // Deep clone numbers only
     const tiles: Tile[][] = existing.map(row => row.map(t => ({ terrain: t.terrain, number: null as number | null })));
     const startIndexByRowMap = [0,1,0,0,2];
@@ -164,37 +245,58 @@ const Home: React.FC = () => {
       if (!pos) continue;
       const tile = tiles[pos.r][pos.c];
       if (tile.terrain !== 'desert') {
-        tile.number = numberOrder[ni++];
-        if (ni >= numberOrder.length) break;
+        tile.number = numberOrder4[ni++];
+        if (ni >= numberOrder4.length) break;
       }
     }
     return tiles;
   }
 
   function CatanSetup() {
-    const [players, setPlayers] = useState<number>(4);
+    const [players, setPlayers] = useState<number>(() => {
+      try { const v = localStorage.getItem('catan_players'); return v ? Number(v) : 4; } catch { return 4; }
+    });
     // no separate seed state required
+    const keyFor = (p: number) => `catan_map_${p}p`;
     const [board, setBoard] = useState<Tile[][] | null>(() => {
       try {
-        const raw = localStorage.getItem('catan_last_map');
+        const raw = localStorage.getItem(keyFor(players));
         if (!raw) return null;
         const parsed = JSON.parse(raw) as { seed: number; board: Tile[][] };
         if (parsed && parsed.board && Array.isArray(parsed.board)) {
-          // Normalize numbers to current spiral mapping
-          const fixed = assignNumbersToExistingBoard(parsed.board);
-          // Persist normalized once
-          localStorage.setItem('catan_last_map', JSON.stringify({ seed: parsed.seed, board: fixed }));
+          const fixed = (players===4 ? assignNumbersToExistingBoard4(parsed.board) : parsed.board);
+          // Persist normalized once into the per-player key
+          localStorage.setItem(keyFor(players), JSON.stringify({ seed: parsed.seed, board: fixed }));
           return fixed;
         }
         return null;
       } catch { return null; }
     });
 
+    // When player count changes, load that board if present; else empty
+    useEffect(() => {
+      try {
+        const raw = localStorage.getItem(keyFor(players));
+        if (!raw) { setBoard(null); return; }
+        const parsed = JSON.parse(raw) as { seed: number; board: Tile[][] };
+        if (parsed && parsed.board && Array.isArray(parsed.board)) {
+          const fixed = (players===4 ? assignNumbersToExistingBoard4(parsed.board) : parsed.board);
+          setBoard(fixed);
+          // optional normalize write-back
+          localStorage.setItem(keyFor(players), JSON.stringify({ seed: parsed.seed, board: fixed }));
+        } else {
+          setBoard(null);
+        }
+      } catch {
+        setBoard(null);
+      }
+    }, [players]);
+
     const onGenerate = () => {
       const newSeed = Date.now();
-      const b = generateBoard(newSeed);
+      const b = (players===6 ? generateBoard6(newSeed) : players===5 ? generateBoard5(newSeed) : generateBoard4(newSeed));
       setBoard(b);
-      localStorage.setItem('catan_last_map', JSON.stringify({ seed: newSeed, board: b }));
+      localStorage.setItem(keyFor(players), JSON.stringify({ seed: newSeed, board: b }));
     };
 
     return (
@@ -206,7 +308,7 @@ const Home: React.FC = () => {
               <div className="text-sm font-medium">Players</div>
               <div className="inline-flex items-center gap-2">
                 {[4,5,6].map(n => (
-                  <button key={n} onClick={() => setPlayers(n)}
+                  <button key={n} onClick={() => { setPlayers(n); try { localStorage.setItem('catan_players', String(n)); } catch {} }}
                     className={`h-9 w-9 rounded-lg border text-sm border-white/30 bg-gradient-to-br ${players===n ? 'from-[#B6116B] to-[#3B1578]' : 'from-[#2E1371] to-[#21232F]'}`}
                     style={{ boxShadow: (players!==n ? '-1px -1px 0px 0px rgb(7, 251, 211), 0px -1px 0px 0px rgb(7, 251, 211)' : '-1px -1px 0px 0px rgb(255, 83, 192), 0px -1px 0px 0px rgb(255, 83, 192)') }}>
                     {n}
@@ -219,22 +321,24 @@ const Home: React.FC = () => {
         </div>
 
         {/* Board container */}
-        <div className="w-full p-4 relative overflow-hidden h-[500px] sm:h-[600px] md:h-[640px]">
+        <div className="w-full p-4 relative overflow-hidden" style={{ height: (players===5 ? '720px' : '600px') }}>
           <Iridescence color={[100, 200, 255]} className='absolute inset-0' />
           <LiquidGlassCard distortion={0.5} thickness={0.5}
-            className="pointer-events-none absolute inset-[-2rem]"
-            style={{ zIndex: 0, width: 'calc(100% + 4rem)', height: 'calc(100% + 4rem)', borderRadius: '0rem' }}
+            className="pointer-events-none absolute"
+            style={{ zIndex: 0, left: '-2rem', top: '-2rem', width: 'calc(100% + 4rem)', height: 'calc(100% + 4rem)', borderRadius: '0rem' }}
           >
             <div />
           </LiquidGlassCard>
-          <div className="absolute z-[1] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[460px] sm:h-[560px] md:h-[600px]" style={{ 
+          <div className="absolute z-[1] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" style={{ 
+            height: (players===6 ? 'calc(100% - 30px)' : 'calc(100% - 120px)'),
+            width: 'auto',
+            aspectRatio: (players===5 ? '0.78 / 1' : '0.866 / 1'),
             clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
             background: 'rgba(255, 255, 255, 0.2)',
-            filter: 'drop-shadow(0 2px 2px rgba(200, 200, 200, 0.5)) blur(2px)',
-            aspectRatio: '0.86/1',
-           }}/>
+            filter: 'drop-shadow(0 2px 2px rgba(200, 200, 200, 0.5)) blur(2px)'
+           }} />
           <div className="absolute z-[2] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-            <CatanBoard board={board} />
+            <CatanBoard board={board} players={players} />
           </div>
         </div>
 
@@ -248,7 +352,7 @@ const Home: React.FC = () => {
     );
   }
 
-  function CatanBoard({ board }: { board: Tile[][] | null }) {
+  function CatanBoard({ board, players }: { board: Tile[][] | null; players: number }) {
 
     const terrainColor: Record<string, string> = {
       forest: '#1f7a1f',
@@ -282,8 +386,8 @@ const Home: React.FC = () => {
     const dx = TILE_W * 0.75; // center-to-center horizontal for flat-top
     const dy = TILE_H * 1.0;  // center-to-center vertical between rows for flat-top
 
-    const maxLen = 5;
-    const containerWidth = TILE_W + dx * (MAX_COLS - 1);
+    const maxLen = players===6 ? Math.max(...columns6) : players===5 ? Math.max(...columns5) : 5;
+    const containerWidth = (players===6 ? TILE_W + dx * (7 - 1) : TILE_W + dx * (MAX_COLS - 1));
     const containerHeight = TILE_H + dy * (maxLen - 1);
 
     const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -296,7 +400,7 @@ const Home: React.FC = () => {
       const recalc = () => {
         const w = el.clientWidth || containerWidth;
         const z = Math.min(1, w / containerWidth);
-        setContainerZoom(z*1.1);
+        setContainerZoom((players===6) ? z : z*1.1);
       };
 
       recalc();
@@ -319,24 +423,42 @@ const Home: React.FC = () => {
           {/* Tile field centered inside the scaled box */}
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ width: containerWidth, height: containerHeight }}>
           {(() => {
-            // Build columns from the row-shaped board using absolute column index
+            const isRow4 = players === 4 && board.length === 5 && board[0]?.length === 3 && board[1]?.length === 4 && board[2]?.length === 5;
+            const isCol = players !== 4 || !isRow4;
+            if (isCol) {
+              // Treat as column-shaped board (works for both 5p and any column data)
+              return board.map((col, cAbs) => {
+                const left = cAbs * dx;
+                const topStart = (maxLen - col.length) * (dy / 2);
+                return col.map((tile, i) => {
+                  const top = topStart + i * dy;
+                  return (
+                    <div key={`${cAbs}-${i}`} className="absolute" style={{ left, top, width: TILE_W, height: TILE_H, zIndex: 1 }}>
+                      <div className="w-full h-full" style={{ clipPath: 'polygon(0% 50%, 25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%)', backgroundColor: terrainColor[tile.terrain], backgroundImage: `url(${terrainImage[tile.terrain]})`, backgroundSize: '100% 100%', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }} />
+                      {tile.terrain !== 'desert' && tile.number !== null && (
+                        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+                          <div className={`flex items-center justify-center rounded-full ${tile.number===6||tile.number===8 ? 'bg-[#B71C1C] text-white' : 'bg-[#f6e6c9] text-black'}`} style={{ width: 28, height: 28, border: '1px solid rgba(0,0,0,0.2)' }}>
+                            <span className="text-xs font-semibold">{tile.number}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              });
+            }
+            // 4p row-shaped: build columns from rows
             const columns: Array<Array<{ r: number; j: number }>> = Array.from({ length: MAX_COLS }, () => []);
-            // Start positions to achieve column heights 3,4,5,4,3 for rows [3,4,5,4,3]
-            // R0 len3 -> start 0 (covers c0..c2)
-            // R1 len4 -> start 1 (covers c1..c4)
-            // R2 len5 -> start 0 (covers c0..c4)
-            // R3 len4 -> start 0 (covers c0..c3)
-            // R4 len3 -> start 2 (covers c2..c4)
-    const startIndexByRow = [0, 1, 0, 0, 2]; // used in rendering; left for clarity
+            const startIndexByRow = [0, 1, 0, 0, 2];
             for (let r = 0; r < board.length; r++) {
               const row = board[r];
               const rowStartAbs = startIndexByRow[r] ?? 0;
               for (let j = 0; j < row.length; j++) {
                 const absC = rowStartAbs + j;
+                if (!columns[absC]) continue;
                 columns[absC].push({ r, j });
               }
             }
-            // Render columns as vertical stacks
             return columns.map((col, cAbs) => {
               const left = cAbs * dx;
               const topStart = (maxLen - col.length) * (dy / 2);
@@ -345,24 +467,10 @@ const Home: React.FC = () => {
                 const tile = board[pos.r][pos.j];
                 return (
                   <div key={`${pos.r}-${pos.j}`} className="absolute" style={{ left, top, width: TILE_W, height: TILE_H, zIndex: 1 }}>
-                    <div
-                      className="w-full h-full"
-                      style={{
-                        // Flat-top (horizontal) hex for resource tiles
-                        clipPath: 'polygon(0% 50%, 25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%)',
-                        background: terrainColor[tile.terrain],
-                        backgroundImage: `url(${terrainImage[tile.terrain]})`,
-                        backgroundSize: '100% 100%',
-                        backgroundPosition: 'center',
-                        backgroundRepeat: 'no-repeat',
-                      }}
-                    />
+                    <div className="w-full h-full" style={{ clipPath: 'polygon(0% 50%, 25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%)', backgroundColor: terrainColor[tile.terrain], backgroundImage: `url(${terrainImage[tile.terrain]})`, backgroundSize: '100% 100%', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }} />
                     {tile.terrain !== 'desert' && tile.number !== null && (
                       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-                        <div
-                          className={`flex items-center justify-center rounded-full ${tile.number===6||tile.number===8 ? 'bg-[#B71C1C] text-white' : 'bg-[#f6e6c9] text-black'}`}
-                          style={{ width: 28, height: 28, border: '1px solid rgba(0,0,0,0.2)' }}
-                        >
+                        <div className={`flex items-center justify-center rounded-full ${tile.number===6||tile.number===8 ? 'bg-[#B71C1C] text-white' : 'bg-[#f6e6c9] text-black'}`} style={{ width: 28, height: 28, border: '1px solid rgba(0,0,0,0.2)' }}>
                           <span className="text-xs font-semibold">{tile.number}</span>
                         </div>
                       </div>
@@ -371,7 +479,7 @@ const Home: React.FC = () => {
                 );
               });
             });
-            })()}
+          })()}
           </div>
         </div>
       </div>
@@ -419,8 +527,8 @@ const Home: React.FC = () => {
         <div className="absolute bottom-0 left-0 right-0 h-[64px] z-[1]" style={{ boxSizing: 'border-box' }}>
           <div className="absolute inset-0 z-[1] overflow-hidden" style={{ background: 'rgba(255, 255, 255, 0.6)', backgroundBlendMode: 'overlay', boxSizing: 'border-box' }} >
             <div className="absolute w-[200px] h-[231px] left-[-45px] top-[-148px] z-[4]" style={{ background: '#3B1578', filter: 'blur(40px)' }} />
-            <div className="absolute w-[200px] h-[231px] left-[86px] top-[12px] z-[2]" style={{ background: '#5172B3', filter: 'blur(60px)' }} />
-            <div className="absolute w-[200px] h-[231px] left-[234px] top-[17px] z-[3]" style={{ background: '#FF53C0', filter: 'blur(60px)' }} />
+            <div className="absolute w-[200px] h-[231px] left-[50%] translate-x-[-50%] top-[12px] z-[2]" style={{ background: '#5172B3', filter: 'blur(60px)' }} />
+            <div className="absolute w-[200px] h-[231px] right-[4px] top-[17px] z-[3]" style={{ background: '#FF53C0', filter: 'blur(60px)' }} />
           </div>
 
 
