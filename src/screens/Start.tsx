@@ -42,7 +42,7 @@ const Start: React.FC = () => {
   }, []);
 
   return (
-    <div className="h-[100dvh] w-[100dvw] overflow-hidden bg-gradient-to-br from-[#2E1371] to-[#130B2B]">
+    <div className="app-safe overflow-hidden bg-gradient-to-br from-[#2E1371] to-[#130B2B]">
         <div className="absolute inset-0" ref={wrapperRef}>
           {/* Laser background */}
           <div className="absolute inset-0">

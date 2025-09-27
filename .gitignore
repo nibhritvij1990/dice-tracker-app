@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+ 
+# Android signing artifacts (do not commit)
+android/keystore.properties
+android/release.keystore

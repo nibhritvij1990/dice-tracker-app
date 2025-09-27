@@ -80,7 +80,7 @@ const Home: React.FC = () => {
   const columns5 = [4,5,6,5,4]; // heights per column (flat-top columns)
   const numberOrder5 = [2,5,4,6,3,9,8,11,11,10,6,3,8,4,8,10,11,12,10,5,4,9,5];
   const spiral5: Array<[number, number]> = [
-    [0,0],[1,0],[2,0],[3,0],[4,0],[4,1],[4,2],[4,3],[3,4],[2,5],[1,4],[0,3],[0,2],[0,1],[1,1],[2,1],[3,1],[3,2],[3,3],[2,4],[1,3],[1,2],[2,2],[2,3]
+    [0,3],[0,2],[0,1],[0,0],[1,0],[2,0],[3,0],[4,0],[4,1],[4,2],[4,3],[3,4],[2,5],[1,4],[1,3],[1,2],[1,1],[2,1],[3,1],[3,2],[3,3],[2,4],[2,3],[2,2]
   ];
 
   // 6-player specs
@@ -300,7 +300,7 @@ const Home: React.FC = () => {
     };
 
     return (
-      <div className="absolute left-0 right-0 top-[76px] bottom-[84px] flex flex-col gap-5 overflow-auto">
+      <div className="absolute left-0 right-0 flex flex-col gap-5 overflow-auto" style={{ top: 'calc(76px + var(--safe-top))', bottom: 'calc(84px + var(--safe-bottom))' }}>
         {/* Top controls */}
         <div className="p-4 rounded-2xl border border-white/10 bg-white/5 mx-5">
           <div className="flex items-center justify-between">
@@ -321,7 +321,7 @@ const Home: React.FC = () => {
         </div>
 
         {/* Board container */}
-        <div className="w-full p-4 relative overflow-hidden" style={{ height: (players===5 ? '720px' : '600px') }}>
+        <div className="w-full p-4 relative overflow-hidden" style={{ height: (players===5 ? '720px' : (players===6 ? '660px' : '600px')) }}>
           <Iridescence color={[100, 200, 255]} className='absolute inset-0' />
           <LiquidGlassCard distortion={0.5} thickness={0.5}
             className="pointer-events-none absolute"
@@ -330,9 +330,9 @@ const Home: React.FC = () => {
             <div />
           </LiquidGlassCard>
           <div className="absolute z-[1] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" style={{ 
-            height: (players===6 ? 'calc(100% - 30px)' : 'calc(100% - 120px)'),
+            height: (players===6 ? 'calc(100% - 120px)' : 'calc(100% - 120px)'),
             width: 'auto',
-            aspectRatio: (players===5 ? '0.78 / 1' : '0.866 / 1'),
+            aspectRatio: (players===5 ? '0.78 / 1' : (players===6 ? '0.9 / 1' : '0.866 / 1')),
             clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
             background: 'rgba(255, 255, 255, 0.2)',
             filter: 'drop-shadow(0 2px 2px rgba(200, 200, 200, 0.5)) blur(2px)'
@@ -487,7 +487,7 @@ const Home: React.FC = () => {
   }
 
   return (
-    <div className="h-[100dvh] w-[100dvw] overflow-hidden bg-gradient-to-br from-[#2E1371] to-[#130B2B] text-white relative">
+    <div className="app-safe overflow-hidden bg-gradient-to-br from-[#2E1371] to-[#130B2B] text-white relative">
         <div className="absolute w-[300px] h-[300px] left-[-132px] top-[178px]" style={{ background: 'rgba(96, 255, 231, 0.4)', filter: 'blur(100px)' }} />
         <div className="absolute w-[300px] h-[300px] right-[-147px] top-[375px]" style={{ background: 'rgba(255, 83, 192, 0.4)', filter: 'blur(100px)' }} />
         
@@ -524,7 +524,7 @@ const Home: React.FC = () => {
 
         {/* Footer nav (placeholders) */}
      
-        <div className="absolute bottom-0 left-0 right-0 h-[64px] z-[1]" style={{ boxSizing: 'border-box' }}>
+        <div className="absolute bottom-0 left-0 right-0 z-[1]" style={{ boxSizing: 'border-box', height: 'calc(64px + var(--safe-bottom))' }}>
           <div className="absolute inset-0 z-[1] overflow-hidden" style={{ background: 'rgba(255, 255, 255, 0.6)', backgroundBlendMode: 'overlay', boxSizing: 'border-box' }} >
             <div className="absolute w-[200px] h-[231px] left-[-45px] top-[-148px] z-[4]" style={{ background: '#3B1578', filter: 'blur(40px)' }} />
             <div className="absolute w-[200px] h-[231px] left-[50%] translate-x-[-50%] top-[12px] z-[2]" style={{ background: '#5172B3', filter: 'blur(60px)' }} />

@@ -253,7 +253,7 @@ const Tracker: React.FC = () => {
   }, [gamesVersion]);
 
   return (
-    <div className="h-[100dvh] w-[100dvw] overflow-hidden bg-gradient-to-br from-[#2E1371] to-[#130B2B] text-white relative">
+    <div className="app-safe overflow-hidden bg-gradient-to-br from-[#2E1371] to-[#130B2B] text-white relative">
         <div className="absolute w-[300px] h-[300px] left-[-132px] top-[178px]" style={{ background: 'rgba(96, 255, 231, 0.4)', filter: 'blur(100px)' }} />
         <div className="absolute w-[300px] h-[300px] right-[-147px] top-[375px]" style={{ background: 'rgba(255, 83, 192, 0.4)', filter: 'blur(100px)' }} />
         
@@ -284,7 +284,7 @@ const Tracker: React.FC = () => {
         </div>
 
         {/* Content */}
-        <div className="absolute left-[1.25rem] right-[1.25rem] top-[76px] bottom-[84px] flex flex-col gap-5 overflow-auto">
+        <div className="absolute left-[1.25rem] right-[1.25rem] flex flex-col gap-5 overflow-auto" style={{ top: 'calc(76px + var(--safe-top))', bottom: 'calc(84px + var(--safe-bottom))' }}>
           {/* Top: Input section with mode toggle */}
           <div className="w-full p-4 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm">
             <div className="flex items-center justify-between">
@@ -421,7 +421,7 @@ const Tracker: React.FC = () => {
 
         {/* Footer nav (placeholders) */}
      
-        <div className="absolute bottom-0 left-0 right-0 h-[64px] z-[1]" style={{ boxSizing: 'border-box' }}>
+        <div className="absolute bottom-0 left-0 right-0 z-[1]" style={{ boxSizing: 'border-box', height: 'calc(64px + var(--safe-bottom))' }}>
           <div className="absolute inset-0 z-[1] overflow-hidden" style={{ background: 'rgba(255, 255, 255, 0.6)', backgroundBlendMode: 'overlay', boxSizing: 'border-box' }} >
             <div className="absolute w-[200px] h-[231px] left-[-45px] top-[-148px] z-[4]" style={{ background: '#3B1578', filter: 'blur(40px)' }} />
             <div className="absolute w-[200px] h-[231px] left-[50%] translate-x-[-50%] top-[12px] z-[2]" style={{ background: '#5172B3', filter: 'blur(60px)' }} />

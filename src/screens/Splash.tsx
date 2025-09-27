@@ -15,7 +15,7 @@ const Splash: React.FC = () => {
   }, [navigate]);
 
   return (
-    <div className="h-[100dvh] w-[100dvw] overflow-hidden bg-gradient-to-br from-[#2E1371] to-black text-white relative overflow-hidden">
+    <div className="app-safe overflow-hidden bg-gradient-to-br from-[#2E1371] to-black text-white relative overflow-hidden">
       <div className="absolute inset-0" ref={wrapperRef}>
         <Iridescence color={[100, 200, 255]} className="absolute inset-0" />
         <LiquidGlassCard distortion={0.8} thickness={1} className='absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[240px] h-[240px] flex flex-col justify-center items-center text-white'>
