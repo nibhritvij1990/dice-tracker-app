@@ -17,6 +17,13 @@
   min-width: 100svw;
 }
 
+/* Scrolling helpers */
+.scroll-y {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
 /* Laser Flow animation inspired by React Bits */
 .laser-flow::before,
 .laser-flow::after {

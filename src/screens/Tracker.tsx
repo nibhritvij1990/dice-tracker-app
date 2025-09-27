@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import LiquidGlassCard from '../components/LiquidGlassCard';
+import GoogleSignInButton from '../components/GoogleSignInButton';
 
 const Tracker: React.FC = () => {
   // removed device presets – full-viewport rendering
@@ -260,7 +261,7 @@ const Tracker: React.FC = () => {
         {/* Header */}
         <div className="px-5 pt-6 pb-4">
           <h1 className="h-9 flex items-center justify-between gap-2 select-none">
-          <button aria-label="Back" className="p-2 relative">
+          <button aria-label="Back" className="p-2 relative opacity-0">
               <div className="w-[32px] h-[32px] rounded-full flex items-center justify-center" style={{ background: 'rgba(255, 255, 255, 0.15)', backgroundBlendMode: 'overlay', backdropFilter: 'blur(20px)', boxShadow: '-1px -1px 0px 0px rgb(7, 251, 211), 0px -1px 0px 0px rgb(7, 251, 211)' }} >
               <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <path d="M15 19l-7-7 7-7" />
@@ -284,7 +285,7 @@ const Tracker: React.FC = () => {
         </div>
 
         {/* Content */}
-        <div className="absolute left-[1.25rem] right-[1.25rem] flex flex-col gap-5 overflow-auto" style={{ top: 'calc(76px + var(--safe-top))', bottom: 'calc(84px + var(--safe-bottom))' }}>
+        <div className="absolute left-[1.25rem] right-[1.25rem] flex flex-col gap-5 scroll-y" style={{ top: 'calc(76px + var(--safe-top))', bottom: 'calc(84px + var(--safe-bottom))' }}>
           {/* Top: Input section with mode toggle */}
           <div className="w-full p-4 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm">
             <div className="flex items-center justify-between">
@@ -474,7 +475,7 @@ const Tracker: React.FC = () => {
         {/* Right Sidebar Drawer */}
         <div className={`fixed inset-0 z-[60] transition-opacity ${menuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} onClick={() => setMenuOpen(false)} aria-hidden={!menuOpen} />
         <div className={`fixed right-0 top-0 bottom-0 z-[61] w-[320px] max-w-[85vw] bg-gradient-to-b from-[#1B0F3E] to-[#120A28] border-l border-white/10 transition-transform duration-300 ${menuOpen ? 'translate-x-0' : 'translate-x-full'}`} role="dialog" aria-modal="true">
-          <div className="h-full flex flex-col">
+          <div className="h-full flex flex-col" style={{ paddingTop: 'var(--safe-top)', paddingBottom: 'var(--safe-bottom)' }}>
             <div className="p-5 border-b border-white/10 flex items-center gap-3">
               <svg className="w-10 h-10 text-white" viewBox="0 0 100 100" aria-hidden>
                 <defs>
@@ -549,6 +550,9 @@ const Tracker: React.FC = () => {
                   )}
                 </div>
               </div>
+            </div>
+            <div className="p-5 border-t border-white/10" style={{ paddingBottom: 'calc(var(--safe-bottom) + 1.25rem)' }}>
+              <GoogleSignInButton variant="full" className="w-full" aria-label="Sign in with Google" />
             </div>
           </div>
         </div>

@@ -42,7 +42,9 @@ const Start: React.FC = () => {
   }, []);
 
   return (
-    <div className="app-safe overflow-hidden bg-gradient-to-br from-[#2E1371] to-[#130B2B]">
+    <div className="app-safe relative bg-gradient-to-br from-[#2E1371] to-[#130B2B]">
+        {/* Fixed background to cover viewport during scroll to avoid white gaps */}
+        <div className="fixed inset-0 -z-10 bg-gradient-to-br from-[#2E1371] to-[#130B2B]" />
         <div className="absolute inset-0" ref={wrapperRef}>
           {/* Laser background */}
           <div className="absolute inset-0">
@@ -137,7 +139,7 @@ const Start: React.FC = () => {
               <Link to="/home" className="w-full h-full py-4 px-8 flex items-center justify-center no-underline" style={{ borderRadius: '8rem', fontWeight: 'bold' }}>Get Started</Link>
             </LiquidGlassCard>
           </div>
-          <GoogleSignInButton className="w-[64px] h-[64px] bg-red rounded-full absolute left-1/2 -translate-x-1/2" style={{ top: 'calc(44% + 152px + 100px)' }} />
+          <GoogleSignInButton className="w-[64px] h-[64px] rounded-full absolute left-1/2 -translate-x-1/2" style={{ top: 'calc(44% + 152px + 100px)' }} />
         </div>
     </div>
   );

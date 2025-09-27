@@ -9,6 +9,7 @@ import orePng from '../assets/images/ore.png';
 import sheepPng from '../assets/images/sheep.png';
 //import waterPng from '../assets/images/gemini_water.png';
 import Iridescence from '../components/Iridescence.tsx';
+import GoogleSignInButton from '../components/GoogleSignInButton';
 
 
 const Home: React.FC = () => {
@@ -300,7 +301,7 @@ const Home: React.FC = () => {
     };
 
     return (
-      <div className="absolute left-0 right-0 flex flex-col gap-5 overflow-auto" style={{ top: 'calc(76px + var(--safe-top))', bottom: 'calc(84px + var(--safe-bottom))' }}>
+      <div className="absolute left-0 right-0 flex flex-col gap-5 scroll-y" style={{ top: 'calc(76px + var(--safe-top))', bottom: 'calc(84px + var(--safe-bottom))' }}>
         {/* Top controls */}
         <div className="p-4 rounded-2xl border border-white/10 bg-white/5 mx-5">
           <div className="flex items-center justify-between">
@@ -321,7 +322,7 @@ const Home: React.FC = () => {
         </div>
 
         {/* Board container */}
-        <div className="w-full p-4 relative overflow-hidden" style={{ height: (players===5 ? '720px' : (players===6 ? '660px' : '600px')) }}>
+        <div id="board-container" className="w-full p-4 relative overflow-hidden" style={{ height: (players===5 ? '720px' : (players===6 ? '660px' : '600px')), minHeight: (players===5 ? '720px' : (players===6 ? '660px' : '600px')) }}>
           <Iridescence color={[100, 200, 255]} className='absolute inset-0' />
           <LiquidGlassCard distortion={0.5} thickness={0.5}
             className="pointer-events-none absolute"
@@ -344,7 +345,7 @@ const Home: React.FC = () => {
 
         {/* Actions */}
           <button onClick={onGenerate} aria-label="Generate Map"
-            className="h-10 mx-5 rounded-lg border border-white/20 bg-gradient-to-br from-[#B6116B] to-[#3B1578] flex items-center justify-center text-sm"
+            className="h-10 min-h-10 mx-5 rounded-lg border border-white/20 bg-gradient-to-br from-[#B6116B] to-[#3B1578] flex items-center justify-center text-sm"
             style={{ boxShadow: '-1px -1px 0px 0px rgb(255, 83, 192), 0px -1px 0px 0px rgb(255, 83, 192)' }}>
             Generate Map
           </button>
@@ -391,34 +392,39 @@ const Home: React.FC = () => {
     const containerHeight = TILE_H + dy * (maxLen - 1);
 
     const wrapperRef = useRef<HTMLDivElement | null>(null);
+    const boardContainerRef = useRef<HTMLDivElement | null>(null);
     const [containerZoom, setContainerZoom] = useState<number>(1);
 
     useEffect(() => {
       const el = wrapperRef.current;
       if (!el) return;
 
-      const recalc = () => {
-        const w = el.clientWidth || containerWidth;
-        const z = Math.min(1, w / containerWidth);
-        setContainerZoom((players===6) ? z : z*1.1);
+      const adjust = () => {
+        // Base zoom via CSS zoom so it respects dvw precisely
+        const dvw = window.innerWidth;
+        const desired = Math.min(1, dvw / containerWidth);
+        setContainerZoom(1);
+        if (boardContainerRef.current) {
+          (boardContainerRef.current as HTMLDivElement).style.zoom = String(desired);
+        }
       };
 
-      recalc();
+      adjust();
 
-      const ro = new ResizeObserver(recalc);
+      const ro = new ResizeObserver(adjust);
       ro.observe(el);
-      window.addEventListener('resize', recalc);
-      window.addEventListener('load', recalc);
+      window.addEventListener('resize', adjust);
+      window.addEventListener('load', adjust);
       return () => {
         ro.disconnect();
-        window.removeEventListener('resize', recalc);
-        window.removeEventListener('load', recalc);
+        window.removeEventListener('resize', adjust);
+        window.removeEventListener('load', adjust);
       };
     }, [board, containerWidth]);
 
     return (
       <div className="relative w-full h-[420px] sm:h-[520px] md:h-[560px] select-none" id="catan-map-container" ref={wrapperRef}>
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+        <div id="board-container" ref={boardContainerRef} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
           style={{ width: containerWidth, height: containerHeight + 45, transform: `scale(${containerZoom})`, transformOrigin: 'center' }}>
           {/* Tile field centered inside the scaled box */}
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ width: containerWidth, height: containerHeight }}>
@@ -494,7 +500,7 @@ const Home: React.FC = () => {
         {/* Header */}
         <div className="px-5 pt-6 pb-4">
           <h1 className="h-9 flex items-center justify-between gap-2 select-none">
-          <button aria-label="Back" className="p-2 relative">
+          <button aria-label="Back" className="p-2 relative opacity-0">
               <div className="w-[32px] h-[32px] rounded-full flex items-center justify-center" style={{ background: 'rgba(255, 255, 255, 0.15)', backgroundBlendMode: 'overlay', backdropFilter: 'blur(20px)', boxShadow: '-1px -1px 0px 0px rgb(7, 251, 211), 0px -1px 0px 0px rgb(7, 251, 211)' }} >
               <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <path d="M15 19l-7-7 7-7" />
@@ -575,7 +581,7 @@ const Home: React.FC = () => {
         {/* Right Sidebar Drawer */}
         <div className={`fixed inset-0 z-[60] transition-opacity ${menuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} onClick={() => setMenuOpen(false)} aria-hidden={!menuOpen} />
         <div className={`fixed right-0 top-0 bottom-0 z-[61] w-[320px] max-w-[85vw] bg-gradient-to-b from-[#1B0F3E] to-[#120A28] border-l border-white/10 transition-transform duration-300 ${menuOpen ? 'translate-x-0' : 'translate-x-full'}`} role="dialog" aria-modal="true">
-          <div className="h-full flex flex-col">
+          <div className="h-full flex flex-col" style={{ paddingTop: 'var(--safe-top)', paddingBottom: 'var(--safe-bottom)' }}>
             <div className="p-5 border-b border-white/10 flex items-center gap-3">
               <svg className="w-10 h-10 text-white" viewBox="0 0 100 100" aria-hidden>
                 <defs>
@@ -629,6 +635,9 @@ const Home: React.FC = () => {
                   {recentGames.length === 0 && (<div className="text-xs text-white/60">No saved games yet</div>)}
                 </div>
               </div>
+            </div>
+            <div className="p-5 border-t border-white/10" style={{ paddingBottom: 'calc(var(--safe-bottom) + 1.25rem)' }}>
+              <GoogleSignInButton variant="full" className="w-full" aria-label="Sign in with Google" />
             </div>
           </div>
         </div>
