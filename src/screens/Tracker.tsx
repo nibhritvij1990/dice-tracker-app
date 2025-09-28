@@ -1,9 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, Suspense, lazy } from 'react';
 import { Link } from 'react-router-dom';
-import LiquidGlassCard from '../components/LiquidGlassCard';
+const LiquidGlassCard = lazy(() => import('../components/LiquidGlassCard'));
 import GoogleSignInButton from '../components/GoogleSignInButton';
 import { useAuth } from '../auth/AuthProvider';
 import { createOrUpdateAppDataJson, readAppDataJson, exportAllLocalStorage, importAllToLocalStorage } from '../drive/driveClient';
+import { exportLocalToFile, importLocalFromFile } from '../drive/localExport';
+import { useSync } from '../drive/SyncProvider';
 
 const Tracker: React.FC = () => {
   // removed device presets – full-viewport rendering
@@ -26,6 +28,7 @@ const Tracker: React.FC = () => {
 
   // Auth
   const { isAuthenticated, user, signIn, signOut, getAccessToken } = useAuth();
+  const { lastBackupAt, autoBackupEnabled, setAutoBackupEnabled } = useSync();
 
   async function handleBackup() {
     try {
@@ -53,6 +56,24 @@ const Tracker: React.FC = () => {
       }
     } catch (e) {
       alert('Restore failed.');
+    }
+  }
+
+  function handleExportFile() {
+    exportLocalToFile()
+  }
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]
+    if (!f) return
+    try {
+      await importLocalFromFile(f)
+      alert('Imported backup. Restarting screen…')
+      window.location.reload()
+    } catch {
+      alert('Import failed: invalid file')
+    } finally {
+      e.currentTarget.value = ''
     }
   }
 
@@ -476,6 +497,7 @@ const Tracker: React.FC = () => {
 
             {/* Tracker (dice icon) */}
             <button aria-label="Tracker" className="p-2 relative h-[40px] w-[40px]">
+              <Suspense fallback={null}>
               <LiquidGlassCard className="absolute w-[64px] h-[64px] rounded-full bottom-[28px] left-[-20px] flex items-center justify-center" style={{ borderRadius: '50%'}} >
                 <svg className="w-6 h-6 text-white" viewBox="0 0 100 100" aria-hidden>
                   <defs>
@@ -492,6 +514,7 @@ const Tracker: React.FC = () => {
                   <rect x="8" y="8" width="84" height="84" rx="12" fill="none" stroke="currentColor" strokeOpacity="0.25" strokeWidth="4" />
                 </svg>
               </LiquidGlassCard>
+              </Suspense>
             </button>
 
             {/* Profile (solid) */}
@@ -507,8 +530,8 @@ const Tracker: React.FC = () => {
         </div>
 
         {/* Right Sidebar Drawer */}
-        <div className={`fixed inset-0 z-[60] transition-opacity ${menuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} onClick={() => setMenuOpen(false)} aria-hidden={!menuOpen} />
-        <div className={`fixed right-0 top-0 bottom-0 z-[61] w-[320px] max-w-[85vw] bg-gradient-to-b from-[#1B0F3E] to-[#120A28] border-l border-white/10 transition-transform duration-300 ${menuOpen ? 'translate-x-0' : 'translate-x-full'}`} role="dialog" aria-modal="true">
+        <div className={`absolute inset-0 z-[60] transition-opacity ${menuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} onClick={() => setMenuOpen(false)} aria-hidden={!menuOpen} />
+        <div className={`absolute right-0 top-0 bottom-0 z-[61] w-[320px] max-w-[85vw] bg-gradient-to-b from-[#1B0F3E] to-[#120A28] border-l border-white/10 transition-transform duration-300 ${menuOpen ? 'translate-x-0' : 'translate-x-full'}`} role="dialog" aria-modal="true">
           <div className="h-full flex flex-col" style={{ paddingTop: 'var(--safe-top)', paddingBottom: 'var(--safe-bottom)' }}>
             <div className="p-5 border-b border-white/10 flex items-center gap-3">
               <svg className="w-10 h-10 text-white" viewBox="0 0 100 100" aria-hidden>
@@ -550,7 +573,7 @@ const Tracker: React.FC = () => {
                 </button>
               </div>
               <div className="pt-2">
-                <button onClick={startNewGame} className="w-full h-10 rounded-md border border-white/15 bg-white/10 hover:bg-white/15 text-white text-sm" style={{ boxShadow: '-1px -1px 0px 0px rgb(255, 83, 192), 0px -1px 0px 0px rgb(255, 83, 192)' }}>New game</button>
+                <button onClick={startNewGame} className="w-full h-10 rounded-md border border-white/15 bg-gradient-to-br from-[#B6116B] to-[#3B1578] text-white text-sm" style={{ boxShadow: '-1px -1px 0px 0px rgb(255, 83, 192), 0px -1px 0px 0px rgb(255, 83, 192)' }}>New game</button>
               </div>
               <div className="mt-4 flex-1 flex flex-col min-h-0">
                 <div className="text-white/70 mb-2">Load game</div>
@@ -585,7 +608,7 @@ const Tracker: React.FC = () => {
                 </div>
               </div>
             </div>
-            <div className="p-5 border-t border-white/10" style={{ paddingBottom: 'var(--safe-bottom)' }}>
+            <div className="p-5 border-t border-white/10" style={{ paddingBottom: 'calc(var(--safe-bottom) + 1.25rem)' }}>
             {isAuthenticated ? (
               <div className="w-full flex flex-col gap-3">
                 <div className="w-full flex items-center gap-3">
@@ -599,6 +622,20 @@ const Tracker: React.FC = () => {
                 <div className="w-full grid grid-cols-2 gap-2">
                   <button onClick={handleBackup} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Backup</button>
                   <button onClick={handleRestore} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Restore</button>
+                </div>
+                <div className="w-full flex items-center justify-between text-xs text-white/80">
+                <div className="flex flex-col"><span>Last backup:</span><span>{lastBackupAt ? new Date(lastBackupAt).toLocaleString() : '—'}</span></div>
+                  <label className="inline-flex items-center gap-1 cursor-pointer">
+                    <input type="checkbox" checked={autoBackupEnabled} onChange={e=>setAutoBackupEnabled(e.target.checked)} />
+                    Auto backup
+                  </label>
+                </div>
+                <div className="w-full grid grid-cols-2 gap-2">
+                  <button onClick={handleExportFile} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Export file</button>
+                  <label className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs flex items-center justify-center cursor-pointer">
+                    Import file
+                    <input type="file" accept="application/json" onChange={handleImportFile} className="hidden" />
+                  </label>
                 </div>
               </div>
             ) : (

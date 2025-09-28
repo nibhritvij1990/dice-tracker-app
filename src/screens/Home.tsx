@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import LiquidGlassCard from '../components/LiquidGlassCard';
 import desertPng from '../assets/images/desert.png';
@@ -7,16 +7,26 @@ import grainPng from '../assets/images/grain.png';
 import lumberPng from '../assets/images/lumber.png';
 import orePng from '../assets/images/ore.png';
 import sheepPng from '../assets/images/sheep.png';
+// Prefer modern formats if available
+import desertWebp from '../assets/images/desert.webp';
+import brickWebp from '../assets/images/brick.webp';
+import grainWebp from '../assets/images/grain.webp';
+import lumberWebp from '../assets/images/lumber.webp';
+import oreWebp from '../assets/images/ore.webp';
+import sheepWebp from '../assets/images/sheep.webp';
 //import waterPng from '../assets/images/gemini_water.png';
-import Iridescence from '../components/Iridescence.tsx';
+const Iridescence = lazy(() => import('../components/Iridescence.tsx'));
 import GoogleSignInButton from '../components/GoogleSignInButton';
 import { useAuth } from '../auth/AuthProvider';
+import { useSync } from '../drive/SyncProvider';
 import { createOrUpdateAppDataJson, readAppDataJson, exportAllLocalStorage, importAllToLocalStorage } from '../drive/driveClient';
+import { exportLocalToFile, importLocalFromFile } from '../drive/localExport';
 
 
 const Home: React.FC = () => {
   // Device presets removed – full-viewport rendering
   const { isAuthenticated, user, signIn, signOut, getAccessToken } = useAuth();
+  const { lastBackupAt, autoBackupEnabled, setAutoBackupEnabled } = useSync();
 
   async function handleBackup() {
     try {
@@ -44,6 +54,24 @@ const Home: React.FC = () => {
       }
     } catch (e) {
       alert('Restore failed. Check Drive permission and try again.');
+    }
+  }
+
+  function handleExportFile() {
+    exportLocalToFile()
+  }
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]
+    if (!f) return
+    try {
+      await importLocalFromFile(f)
+      alert('Imported backup. Restarting screen…')
+      window.location.reload()
+    } catch {
+      alert('Import failed: invalid file')
+    } finally {
+      e.currentTarget.value = ''
     }
   }
 
@@ -355,7 +383,9 @@ const Home: React.FC = () => {
 
         {/* Board container */}
         <div id="board-container" className="w-full p-4 relative overflow-hidden" style={{ height: (players===5 ? '720px' : (players===6 ? '660px' : '600px')), minHeight: (players===5 ? '720px' : (players===6 ? '660px' : '600px')) }}>
-          <Iridescence color={[100, 200, 255]} className='absolute inset-0' />
+          <Suspense fallback={null}>
+            <Iridescence color={[100, 200, 255]} className='absolute inset-0' />
+          </Suspense>
           <LiquidGlassCard distortion={0.5} thickness={0.5}
             className="pointer-events-none absolute"
             style={{ zIndex: 0, left: '-2rem', top: '-2rem', width: 'calc(100% + 4rem)', height: 'calc(100% + 4rem)', borderRadius: '0rem' }}
@@ -396,12 +426,12 @@ const Home: React.FC = () => {
       desert: '#d7c58b',
     };
     const terrainImage: Record<string, string> = {
-      forest: lumberPng,
-      pasture: sheepPng,
-      fields: grainPng,
-      hills: brickPng,
-      mountains: orePng,
-      desert: desertPng,
+      forest: lumberWebp || lumberPng,
+      pasture: sheepWebp || sheepPng,
+      fields: grainWebp || grainPng,
+      hills: brickWebp || brickPng,
+      mountains: oreWebp || orePng,
+      desert: desertWebp || desertPng,
     };
 
     if (!board) {
@@ -611,8 +641,8 @@ const Home: React.FC = () => {
 
         </div>
         {/* Right Sidebar Drawer */}
-        <div className={`fixed inset-0 z-[60] transition-opacity ${menuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} onClick={() => setMenuOpen(false)} aria-hidden={!menuOpen} />
-        <div className={`fixed right-0 top-0 bottom-0 z-[61] w-[320px] max-w-[85vw] bg-gradient-to-b from-[#1B0F3E] to-[#120A28] border-l border-white/10 transition-transform duration-300 ${menuOpen ? 'translate-x-0' : 'translate-x-full'}`} role="dialog" aria-modal="true">
+        <div className={`absolute inset-0 z-[60] transition-opacity ${menuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} onClick={() => setMenuOpen(false)} aria-hidden={!menuOpen} />
+        <div className={`absolute right-0 top-0 bottom-0 z-[61] w-[320px] max-w-[85vw] bg-gradient-to-b from-[#1B0F3E] to-[#120A28] border-l border-white/10 transition-transform duration-300 ${menuOpen ? 'translate-x-0' : 'translate-x-full'}`} role="dialog" aria-modal="true">
           <div className="h-full flex flex-col" style={{ paddingTop: 'var(--safe-top)', paddingBottom: 'var(--safe-bottom)' }}>
             <div className="p-5 border-b border-white/10 flex items-center gap-3">
               <svg className="w-10 h-10 text-white" viewBox="0 0 100 100" aria-hidden>
@@ -645,7 +675,7 @@ const Home: React.FC = () => {
                 </button>
               </div>
               <div className="pt-2">
-                <button onClick={startNewGame} className="w-full h-10 rounded-md border border-white/15 bg-white/10 hover:bg-white/15 text-white text-sm" style={{ boxShadow: '-1px -1px 0px 0px rgb(255, 83, 192), 0px -1px 0px 0px rgb(255, 83, 192)' }}>New game</button>
+                <button onClick={startNewGame} className="w-full h-10 rounded-md border border-white/15 bg-gradient-to-br from-[#B6116B] to-[#3B1578] text-white text-sm" style={{ boxShadow: '-1px -1px 0px 0px rgb(255, 83, 192), 0px -1px 0px 0px rgb(255, 83, 192)' }}>New game</button>
               </div>
               <div className="mt-4 flex-1 flex flex-col min-h-0">
                 <div className="text-white/70 mb-2">Load game</div>
@@ -670,9 +700,9 @@ const Home: React.FC = () => {
             </div>
             <div className="p-5 border-t border-white/10" style={{ paddingBottom: 'calc(var(--safe-bottom) + 1.25rem)' }}>
               {isAuthenticated ? (
-                <div className="w-full flex flex-col gap-3">
+                  <div className="w-full flex flex-col gap-3">
                   <div className="w-full flex items-center gap-3">
-                  <img src={user?.imageUrl || ''} alt="avatar" className="w-9 h-9 rounded-full bg-white/20" />
+                  <img src={user?.imageUrl || ''} alt="avatar" className="w-9 h-9 rounded-full bg-white/20" loading="lazy" decoding="async" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm truncate">{user?.name}</div>
                     <div className="text-xs text-white/70 truncate">{user?.email}</div>
@@ -682,6 +712,20 @@ const Home: React.FC = () => {
                   <div className="w-full grid grid-cols-2 gap-2">
                     <button onClick={handleBackup} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Backup</button>
                     <button onClick={handleRestore} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Restore</button>
+                  </div>
+                  <div className="w-full flex items-center justify-between text-xs text-white/80">
+                    <div className="flex flex-col"><span>Last backup:</span><span>{lastBackupAt ? new Date(lastBackupAt).toLocaleString() : '—'}</span></div>
+                    <label className="inline-flex items-center gap-1 cursor-pointer">
+                      <input type="checkbox" checked={autoBackupEnabled} onChange={e=>setAutoBackupEnabled(e.target.checked)} />
+                      Auto backup
+                    </label>
+                  </div>
+                  <div className="w-full grid grid-cols-2 gap-2">
+                    <button onClick={handleExportFile} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Export file</button>
+                    <label className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs flex items-center justify-center cursor-pointer">
+                      Import file
+                      <input type="file" accept="application/json" onChange={handleImportFile} className="hidden" />
+                    </label>
                   </div>
                 </div>
               ) : (

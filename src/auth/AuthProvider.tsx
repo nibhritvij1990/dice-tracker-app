@@ -37,6 +37,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         })
       } catch {}
     })()
+
+    // Dev-only mock auth for tests: ?mockAuth=1 or localStorage mock_auth=1
+    try {
+      const url = new URL(window.location.href)
+      const mock = url.searchParams.get('mockAuth') === '1' || localStorage.getItem('mock_auth') === '1'
+      if (import.meta.env.DEV && mock) {
+        setUser({ name: 'Mock User', email: 'mock@example.com', imageUrl: '' })
+        setAccessToken('mock')
+      }
+    } catch {}
   }, [])
 
   const signIn = useCallback(async () => {

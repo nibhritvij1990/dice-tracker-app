@@ -4,6 +4,7 @@ import { HashRouter } from 'react-router-dom'
 import './index.css'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { AuthProvider } from './auth/AuthProvider'
+import { SyncProvider } from './drive/SyncProvider'
 import App from './App.tsx'
 
 // Configure native status bar (no overlay, light content over dark bg)
@@ -14,7 +15,9 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <HashRouter>
       <AuthProvider>
-        <App />
+        <SyncProvider>
+          <App />
+        </SyncProvider>
       </AuthProvider>
     </HashRouter>
   </StrictMode>,

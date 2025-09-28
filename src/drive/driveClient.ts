@@ -17,6 +17,11 @@ async function authFetch(url: string, accessToken: string, init?: RequestInit): 
     },
   })
   if (!res.ok) {
+    if (res.status === 401) {
+      const err: any = new Error('Unauthorized')
+      err.code = 'AUTH_401'
+      throw err
+    }
     const text = await res.text().catch(() => '')
     throw new Error(`Drive API error ${res.status}: ${text}`)
   }

@@ -5,10 +5,18 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:5173": "vite --port 5173 --strictPort",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "apk:debug": "bash ./scripts/build-debug-apk.sh"
+    "apk:debug": "bash ./scripts/build-debug-apk.sh",
+    "images:opt": "node ./scripts/optimize-images.mjs",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:install": "playwright install",
+    "dev:test": "concurrently -k \"npm run dev:5173\" \"wait-on http://localhost:5173 && playwright test\"",
+    "dev:5175": "vite --port 5175 --strictPort",
+    "dev:test:5175": "concurrently -k \"npm run dev:5175\" \"wait-on http://localhost:5175 && BASE_URL=http://localhost:5175 playwright test\""
   },
   "dependencies": {
     "@capacitor/android": "^7.4.3",
@@ -29,6 +37,7 @@
     "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^7.4.3",
     "@eslint/js": "^9.36.0",
+    "@playwright/test": "^1.55.1",
     "@tailwindcss/postcss": "^4.1.13",
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",
@@ -39,6 +48,7 @@
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^16.4.0",
     "postcss": "^8.5.6",
+    "sharp": "^0.34.4",
     "tailwindcss": "^4.1.13",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.44.0",

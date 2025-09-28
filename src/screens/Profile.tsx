@@ -4,9 +4,12 @@ import LiquidGlassCard from '../components/LiquidGlassCard';
 import GoogleSignInButton from '../components/GoogleSignInButton';
 import { useAuth } from '../auth/AuthProvider';
 import { createOrUpdateAppDataJson, readAppDataJson, exportAllLocalStorage, importAllToLocalStorage } from '../drive/driveClient';
+import { exportLocalToFile, importLocalFromFile } from '../drive/localExport';
+import { useSync } from '../drive/SyncProvider';
 
 const Profile: React.FC = () => {
   const { isAuthenticated, user, signIn, signOut, getAccessToken } = useAuth();
+  const { lastBackupAt, autoBackupEnabled, setAutoBackupEnabled } = useSync();
 
   async function handleBackup() {
     try {
@@ -34,6 +37,24 @@ const Profile: React.FC = () => {
       }
     } catch (e) {
       alert('Restore failed.');
+    }
+  }
+
+  function handleExportFile() {
+    exportLocalToFile()
+  }
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]
+    if (!f) return
+    try {
+      await importLocalFromFile(f)
+      alert('Imported backup. Restarting screen…')
+      window.location.reload()
+    } catch {
+      alert('Import failed: invalid file')
+    } finally {
+      e.currentTarget.value = ''
     }
   }
   // device presets removed – full-viewport rendering
@@ -216,7 +237,7 @@ const Profile: React.FC = () => {
         {/* Current game hero */}
         <div className="px-5 mt-3">
           <LiquidGlassCard className="w-full rounded-2xl p-4" style={{ borderRadius: '1rem' }}>
-            <div className="flex items-center justify-between">
+            <div className="w-full flex items-center justify-between">
               <div>
                 <div className="text-sm text-white/70">Current game</div>
                 <div className="text-lg font-semibold">{gameName}</div>
@@ -257,7 +278,7 @@ const Profile: React.FC = () => {
               {(() => {
                 const counts: number[] = Array.from({ length: 11 }, (_, i) => currentRolls.filter(r => r.total === (i+2)).length);
                 const max = Math.max(1, ...counts);
-                const BAR_PX_TOTAL = 64; // h-16
+                const BAR_PX_TOTAL = 50; // h-16
                 return counts.map((c, idx) => {
                   const barPx = Math.max(2, Math.round((c / max) * BAR_PX_TOTAL));
                   const n = idx + 2;
@@ -365,8 +386,8 @@ const Profile: React.FC = () => {
 
         </div>
         {/* Right Sidebar Drawer */}
-        <div className={`fixed inset-0 z-[60] transition-opacity ${menuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} onClick={() => setMenuOpen(false)} aria-hidden={!menuOpen} />
-        <div className={`fixed right-0 top-0 bottom-0 z-[61] w-[320px] max-w-[85vw] bg-gradient-to-b from-[#1B0F3E] to-[#120A28] border-l border-white/10 transition-transform duration-300 ${menuOpen ? 'translate-x-0' : 'translate-x-full'}`} role="dialog" aria-modal="true">
+        <div className={`${menuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'} absolute inset-0 z-[60] transition-opacity`} onClick={() => setMenuOpen(false)} aria-hidden={!menuOpen} />
+        <div className={`absolute right-0 top-0 bottom-0 z-[61] w-[320px] max-w-[85vw] bg-gradient-to-b from-[#1B0F3E] to-[#120A28] border-l border-white/10 transition-transform duration-300 ${menuOpen ? 'translate-x-0' : 'translate-x-full'}`} role="dialog" aria-modal="true">
           <div className="h-full flex flex-col" style={{ paddingTop: 'var(--safe-top)', paddingBottom: 'var(--safe-bottom)' }}>
             <div className="p-5 border-b border-white/10 flex items-center gap-3">
               <svg className="w-10 h-10 text-white" viewBox="0 0 100 100" aria-hidden>
@@ -436,6 +457,20 @@ const Profile: React.FC = () => {
                   <div className="w-full grid grid-cols-2 gap-2">
                     <button onClick={handleBackup} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Backup</button>
                     <button onClick={handleRestore} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Restore</button>
+                  </div>
+                  <div className="w-full flex items-center justify-between text-xs text-white/80">
+                  <div className="flex flex-col"><span>Last backup:</span><span>{lastBackupAt ? new Date(lastBackupAt).toLocaleString() : '—'}</span></div>
+                    <label className="inline-flex items-center gap-1 cursor-pointer">
+                      <input type="checkbox" checked={autoBackupEnabled} onChange={e=>setAutoBackupEnabled(e.target.checked)} />
+                      Auto backup
+                    </label>
+                  </div>
+                  <div className="w-full grid grid-cols-2 gap-2">
+                    <button onClick={handleExportFile} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Export file</button>
+                    <label className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs flex items-center justify-center cursor-pointer">
+                      Import file
+                      <input type="file" accept="application/json" onChange={handleImportFile} className="hidden" />
+                    </label>
                   </div>
                 </div>
               ) : (
