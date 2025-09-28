@@ -3,12 +3,14 @@ import { Link } from 'react-router-dom';
 import LaserFlow from '../components/LaserFlow';
 import LiquidGlassCard from '../components/LiquidGlassCard';
 import GoogleSignInButton from '../components/GoogleSignInButton';
+import { useAuth } from '../auth/AuthProvider';
 
 const Start: React.FC = () => {
   // device presets removed – full-viewport rendering
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const targetRef = useRef<HTMLDivElement | null>(null);
   const [impactAnchor, setImpactAnchor] = useState<{ x: number; y: number } | null>(null);
+  const { isAuthenticated, signIn } = useAuth();
 
   useLayoutEffect(() => {
     const wrapper = wrapperRef.current;
@@ -139,7 +141,9 @@ const Start: React.FC = () => {
               <Link to="/home" className="w-full h-full py-4 px-8 flex items-center justify-center no-underline" style={{ borderRadius: '8rem', fontWeight: 'bold' }}>Get Started</Link>
             </LiquidGlassCard>
           </div>
-          <GoogleSignInButton className="w-[64px] h-[64px] rounded-full absolute left-1/2 -translate-x-1/2" style={{ top: 'calc(44% + 152px + 100px)' }} />
+          {!isAuthenticated && (
+            <GoogleSignInButton onClick={signIn} className="w-[64px] h-[64px] rounded-full absolute left-1/2 -translate-x-1/2" style={{ top: 'calc(44% + 152px + 100px)' }} />
+          )}
         </div>
     </div>
   );

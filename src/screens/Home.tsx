@@ -10,10 +10,42 @@ import sheepPng from '../assets/images/sheep.png';
 //import waterPng from '../assets/images/gemini_water.png';
 import Iridescence from '../components/Iridescence.tsx';
 import GoogleSignInButton from '../components/GoogleSignInButton';
+import { useAuth } from '../auth/AuthProvider';
+import { createOrUpdateAppDataJson, readAppDataJson, exportAllLocalStorage, importAllToLocalStorage } from '../drive/driveClient';
 
 
 const Home: React.FC = () => {
   // Device presets removed – full-viewport rendering
+  const { isAuthenticated, user, signIn, signOut, getAccessToken } = useAuth();
+
+  async function handleBackup() {
+    try {
+      const token = await getAccessToken();
+      if (!token) return;
+      const snapshot = exportAllLocalStorage();
+      await createOrUpdateAppDataJson(token, 'app_data.json', { snapshot, ts: Date.now() });
+      alert('Backup complete to Drive AppData.');
+    } catch (e) {
+      alert('Backup failed. Check Drive permission and try again.');
+    }
+  }
+
+  async function handleRestore() {
+    try {
+      const token = await getAccessToken();
+      if (!token) return;
+      const data = await readAppDataJson<{ snapshot: Record<string,string> }>(token, 'app_data.json');
+      if (data?.snapshot) {
+        importAllToLocalStorage(data.snapshot);
+        alert('Restore complete. Restarting screen…');
+        window.location.reload();
+      } else {
+        alert('No backup found.');
+      }
+    } catch (e) {
+      alert('Restore failed. Check Drive permission and try again.');
+    }
+  }
 
   type Terrain = 'forest' | 'pasture' | 'fields' | 'hills' | 'mountains' | 'desert';
   type Tile = { terrain: Terrain; number: number | null };
@@ -637,7 +669,24 @@ const Home: React.FC = () => {
               </div>
             </div>
             <div className="p-5 border-t border-white/10" style={{ paddingBottom: 'calc(var(--safe-bottom) + 1.25rem)' }}>
-              <GoogleSignInButton variant="full" className="w-full" aria-label="Sign in with Google" />
+              {isAuthenticated ? (
+                <div className="w-full flex flex-col gap-3">
+                  <div className="w-full flex items-center gap-3">
+                  <img src={user?.imageUrl || ''} alt="avatar" className="w-9 h-9 rounded-full bg-white/20" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm truncate">{user?.name}</div>
+                    <div className="text-xs text-white/70 truncate">{user?.email}</div>
+                  </div>
+                  <button onClick={signOut} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Sign out</button>
+                  </div>
+                  <div className="w-full grid grid-cols-2 gap-2">
+                    <button onClick={handleBackup} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Backup</button>
+                    <button onClick={handleRestore} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Restore</button>
+                  </div>
+                </div>
+              ) : (
+                <GoogleSignInButton onClick={signIn} variant="full" className="w-full" aria-label="Sign in with Google" />
+              )}
             </div>
           </div>
         </div>

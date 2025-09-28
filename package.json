@@ -14,6 +14,7 @@
     "@capacitor/android": "^7.4.3",
     "@capacitor/core": "^7.4.3",
     "@capacitor/status-bar": "^7.0.3",
+    "@capgo/capacitor-social-login": "^7.11.8",
     "@emotion/is-prop-valid": "^1.4.0",
     "@react-three/drei": "^10.7.6",
     "@react-three/fiber": "^9.3.0",
