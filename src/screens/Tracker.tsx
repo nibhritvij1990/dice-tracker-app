@@ -608,11 +608,11 @@ const Tracker: React.FC = () => {
                 </div>
               </div>
             </div>
-            <div className="p-5 border-t border-white/10" style={{ paddingBottom: 'calc(var(--safe-bottom) + 1.25rem)' }}>
+            <div className="p-5 border-t border-white/10" style={{ paddingBottom: 'var(--safe-bottom)' }}>
             {isAuthenticated ? (
               <div className="w-full flex flex-col gap-3">
                 <div className="w-full flex items-center gap-3">
-                  <img src={user?.imageUrl || ''} alt="avatar" className="w-9 h-9 rounded-full bg-white/20" />
+                  <img src={user?.imageUrl || ''} alt="avatar" className="w-9 h-9 rounded-full bg-white/20" loading="eager" decoding="async" referrerPolicy="no-referrer" crossOrigin="anonymous" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm truncate">{user?.name}</div>
                     <div className="text-xs text-white/70 truncate">{user?.email}</div>

@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { SocialLogin } from '@capgo/capacitor-social-login'
+import { Capacitor } from '@capacitor/core'
 
 type AuthUser = {
   name: string
@@ -17,6 +18,9 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
+const STORAGE_USER = 'auth_user'
+const STORAGE_TOKEN = 'auth_access_token'
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const isAuthenticated = !!user
@@ -33,6 +37,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             webClientId: webClientId ?? '',
             iOSClientId: iOSClientId ?? '',
             mode: 'online',
+            redirectUrl: 'com.nibhritvij.dicetracker://oauth2redirect'
           },
         })
       } catch {}
@@ -47,23 +52,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setAccessToken('mock')
       }
     } catch {}
+
+    // Hydrate from persisted storage (non-mock)
+    try {
+      const rawUser = localStorage.getItem(STORAGE_USER)
+      const rawToken = localStorage.getItem(STORAGE_TOKEN)
+      if (rawUser && rawToken) {
+        const parsed = JSON.parse(rawUser) as AuthUser
+        if (parsed && parsed.email) {
+          setUser(parsed)
+          setAccessToken(rawToken)
+        }
+      }
+    } catch {}
   }, [])
 
   const signIn = useCallback(async () => {
     try {
+      const isAndroid = Capacitor.getPlatform() === 'android'
+      const nonAndroidScopes = ['email', 'profile', 'https://www.googleapis.com/auth/drive.appdata']
       const loginRes = await SocialLogin.login({
         provider: 'google',
-        options: { scopes: ['email', 'profile', 'https://www.googleapis.com/auth/drive.appdata'] },
+        options: isAndroid ? {} : { scopes: nonAndroidScopes },
       })
       const data = (loginRes as any)?.result
       const profile = data?.profile
       const token = data?.accessToken?.token as string | undefined
       if (token) setAccessToken(token)
       if (profile?.email) {
-        setUser({ name: profile.name ?? profile.email, email: profile.email, imageUrl: profile.imageUrl ?? profile.imageUrl })
+        const nextUser: AuthUser = { name: profile.name ?? profile.email, email: profile.email, imageUrl: profile.imageUrl ?? profile.imageUrl }
+        setUser(nextUser)
+        try {
+          if (token) localStorage.setItem(STORAGE_TOKEN, token)
+          localStorage.setItem(STORAGE_USER, JSON.stringify(nextUser))
+        } catch {}
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Google sign-in failed', err)
+      const errText = err?.message || err?.error || err?.toString?.() || 'Unknown error'
+      try { alert(`Sign-in failed: ${errText}`) } catch {}
     }
   }, [])
 
@@ -73,6 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {}
     setUser(null)
     setAccessToken(null)
+    try { localStorage.removeItem(STORAGE_USER); localStorage.removeItem(STORAGE_TOKEN) } catch {}
   }, [])
 
   const getAccessToken = useCallback(async () => accessToken ?? null, [accessToken])
