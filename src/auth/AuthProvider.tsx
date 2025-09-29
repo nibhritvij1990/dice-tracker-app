@@ -36,8 +36,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           google: {
             webClientId: webClientId ?? '',
             iOSClientId: iOSClientId ?? '',
-            mode: 'online',
-            redirectUrl: 'com.nibhritvij.dicetracker://oauth2redirect'
+            mode: 'online'
           },
         })
       } catch {}
