@@ -382,7 +382,7 @@ const Home: React.FC = () => {
         </div>
 
         {/* Board container */}
-        <div id="board-container" className="w-full p-4 relative overflow-hidden" style={{ height: (players===5 ? '720px' : (players===6 ? '660px' : '600px')), minHeight: (players===5 ? '720px' : (players===6 ? '660px' : '600px')) }}>
+        <div id="board-container" className="w-full p-4 relative overflow-hidden" style={{ height: (players===4 ? '600px' : '660px'), minHeight: (players===5 ? '720px' : (players===6 ? '660px' : '600px')) }}>
           <Suspense fallback={null}>
             <Iridescence color={[100, 200, 255]} className='absolute inset-0' />
           </Suspense>
@@ -393,9 +393,9 @@ const Home: React.FC = () => {
             <div />
           </LiquidGlassCard>
           <div className="absolute z-[1] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" style={{ 
-            height: (players===6 ? 'calc(100% - 120px)' : 'calc(100% - 120px)'),
+            height: (players===6 ? 'calc(100% - 120px)' : 'calc(100% - 100px)'),
             width: 'auto',
-            aspectRatio: (players===5 ? '0.78 / 1' : (players===6 ? '0.9 / 1' : '0.866 / 1')),
+            aspectRatio: (players===5 ? '0.75 / 1' : (players===6 ? '0.9 / 1' : '0.866 / 1')),
             clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
             background: 'rgba(255, 255, 255, 0.2)',
             filter: 'drop-shadow(0 2px 2px rgba(200, 200, 200, 0.5)) blur(2px)'
@@ -462,10 +462,10 @@ const Home: React.FC = () => {
       if (!el) return;
 
       const adjust = () => {
-        // Base zoom via CSS zoom so it respects dvw precisely
         const dvw = window.innerWidth;
         const desired = Math.min(1, dvw / containerWidth);
-        setContainerZoom(1);
+        if (players===6) setContainerZoom(1);
+        else setContainerZoom(1.2);
         if (boardContainerRef.current) {
           (boardContainerRef.current as HTMLDivElement).style.zoom = String(desired);
         }
@@ -698,7 +698,7 @@ const Home: React.FC = () => {
                 </div>
               </div>
             </div>
-            <div className="p-5 border-t border-white/10" style={{ paddingBottom: 'var(--safe-bottom)' }}>
+            <div className="p-5 border-t border-white/10" style={{ paddingBottom: 'max(var(--safe-bottom), 1.25rem)' }}>
               {isAuthenticated ? (
                   <div className="w-full flex flex-col gap-3">
                   <div className="w-full flex items-center gap-3">
