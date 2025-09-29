@@ -382,7 +382,7 @@ const Home: React.FC = () => {
         </div>
 
         {/* Board container */}
-        <div id="board-container" className="w-full p-4 relative overflow-hidden" style={{ height: (players===4 ? '600px' : '660px'), minHeight: (players===5 ? '720px' : (players===6 ? '660px' : '600px')) }}>
+        <div id="board-container" className="w-full p-4 relative overflow-hidden" style={{ height: (players===4 ? '600px' : '660px'), minHeight: (players===4 ? '600px' : '660px') }}>
           <Suspense fallback={null}>
             <Iridescence color={[100, 200, 255]} className='absolute inset-0' />
           </Suspense>
