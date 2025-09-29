@@ -8,13 +8,33 @@
   --safe-right: env(safe-area-inset-right);
 }
 
+@media (min-width: 100dvh) {
+  html, body, #root {
+    max-width: 50dvw;
+    margin: 0 auto;
+    position: relative;
+    background: linear-gradient(225deg, #2E1371, #130B2B);
+  }
+  #root {
+    box-shadow: 0px 0px 16px 0px #ffffff44;
+  }
+}
+
+
 .app-safe {
   padding-top: var(--safe-top);
   padding-bottom: var(--safe-bottom);
   padding-left: var(--safe-left);
   padding-right: var(--safe-right);
   min-height: 100svh;
-  min-width: 100svw;
+  min-width: 100%;
+}
+
+/* Scrolling helpers */
+.scroll-y {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 /* Laser Flow animation inspired by React Bits */

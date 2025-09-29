@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import LiquidGlassCard from '../components/LiquidGlassCard';
 import desertPng from '../assets/images/desert.png';
@@ -7,12 +7,73 @@ import grainPng from '../assets/images/grain.png';
 import lumberPng from '../assets/images/lumber.png';
 import orePng from '../assets/images/ore.png';
 import sheepPng from '../assets/images/sheep.png';
+// Prefer modern formats if available
+import desertWebp from '../assets/images/desert.webp';
+import brickWebp from '../assets/images/brick.webp';
+import grainWebp from '../assets/images/grain.webp';
+import lumberWebp from '../assets/images/lumber.webp';
+import oreWebp from '../assets/images/ore.webp';
+import sheepWebp from '../assets/images/sheep.webp';
 //import waterPng from '../assets/images/gemini_water.png';
-import Iridescence from '../components/Iridescence.tsx';
+const Iridescence = lazy(() => import('../components/Iridescence.tsx'));
+import GoogleSignInButton from '../components/GoogleSignInButton';
+import { useAuth } from '../auth/AuthProvider';
+import { useSync } from '../drive/SyncProvider';
+import { createOrUpdateAppDataJson, readAppDataJson, exportAllLocalStorage, importAllToLocalStorage } from '../drive/driveClient';
+import { exportLocalToFile, importLocalFromFile } from '../drive/localExport';
 
 
 const Home: React.FC = () => {
   // Device presets removed – full-viewport rendering
+  const { isAuthenticated, user, signIn, signOut, getAccessToken } = useAuth();
+  const { lastBackupAt, autoBackupEnabled, setAutoBackupEnabled } = useSync();
+
+  async function handleBackup() {
+    try {
+      const token = await getAccessToken();
+      if (!token) return;
+      const snapshot = exportAllLocalStorage();
+      await createOrUpdateAppDataJson(token, 'app_data.json', { snapshot, ts: Date.now() });
+      alert('Backup complete to Drive AppData.');
+    } catch (e) {
+      alert('Backup failed. Check Drive permission and try again.');
+    }
+  }
+
+  async function handleRestore() {
+    try {
+      const token = await getAccessToken();
+      if (!token) return;
+      const data = await readAppDataJson<{ snapshot: Record<string,string> }>(token, 'app_data.json');
+      if (data?.snapshot) {
+        importAllToLocalStorage(data.snapshot);
+        alert('Restore complete. Restarting screen…');
+        window.location.reload();
+      } else {
+        alert('No backup found.');
+      }
+    } catch (e) {
+      alert('Restore failed. Check Drive permission and try again.');
+    }
+  }
+
+  function handleExportFile() {
+    exportLocalToFile()
+  }
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]
+    if (!f) return
+    try {
+      await importLocalFromFile(f)
+      alert('Imported backup. Restarting screen…')
+      window.location.reload()
+    } catch {
+      alert('Import failed: invalid file')
+    } finally {
+      e.currentTarget.value = ''
+    }
+  }
 
   type Terrain = 'forest' | 'pasture' | 'fields' | 'hills' | 'mountains' | 'desert';
   type Tile = { terrain: Terrain; number: number | null };
@@ -300,7 +361,7 @@ const Home: React.FC = () => {
     };
 
     return (
-      <div className="absolute left-0 right-0 flex flex-col gap-5 overflow-auto" style={{ top: 'calc(76px + var(--safe-top))', bottom: 'calc(84px + var(--safe-bottom))' }}>
+      <div className="absolute left-0 right-0 flex flex-col gap-5 scroll-y" style={{ top: 'calc(76px + var(--safe-top))', bottom: 'calc(84px + var(--safe-bottom))' }}>
         {/* Top controls */}
         <div className="p-4 rounded-2xl border border-white/10 bg-white/5 mx-5">
           <div className="flex items-center justify-between">
@@ -321,8 +382,10 @@ const Home: React.FC = () => {
         </div>
 
         {/* Board container */}
-        <div className="w-full p-4 relative overflow-hidden" style={{ height: (players===5 ? '720px' : (players===6 ? '660px' : '600px')) }}>
-          <Iridescence color={[100, 200, 255]} className='absolute inset-0' />
+        <div id="board-container" className="w-full p-4 relative overflow-hidden" style={{ height: (players===5 ? '720px' : (players===6 ? '660px' : '600px')), minHeight: (players===5 ? '720px' : (players===6 ? '660px' : '600px')) }}>
+          <Suspense fallback={null}>
+            <Iridescence color={[100, 200, 255]} className='absolute inset-0' />
+          </Suspense>
           <LiquidGlassCard distortion={0.5} thickness={0.5}
             className="pointer-events-none absolute"
             style={{ zIndex: 0, left: '-2rem', top: '-2rem', width: 'calc(100% + 4rem)', height: 'calc(100% + 4rem)', borderRadius: '0rem' }}
@@ -344,7 +407,7 @@ const Home: React.FC = () => {
 
         {/* Actions */}
           <button onClick={onGenerate} aria-label="Generate Map"
-            className="h-10 mx-5 rounded-lg border border-white/20 bg-gradient-to-br from-[#B6116B] to-[#3B1578] flex items-center justify-center text-sm"
+            className="h-10 min-h-10 mx-5 rounded-lg border border-white/20 bg-gradient-to-br from-[#B6116B] to-[#3B1578] flex items-center justify-center text-sm"
             style={{ boxShadow: '-1px -1px 0px 0px rgb(255, 83, 192), 0px -1px 0px 0px rgb(255, 83, 192)' }}>
             Generate Map
           </button>
@@ -363,12 +426,12 @@ const Home: React.FC = () => {
       desert: '#d7c58b',
     };
     const terrainImage: Record<string, string> = {
-      forest: lumberPng,
-      pasture: sheepPng,
-      fields: grainPng,
-      hills: brickPng,
-      mountains: orePng,
-      desert: desertPng,
+      forest: lumberWebp || lumberPng,
+      pasture: sheepWebp || sheepPng,
+      fields: grainWebp || grainPng,
+      hills: brickWebp || brickPng,
+      mountains: oreWebp || orePng,
+      desert: desertWebp || desertPng,
     };
 
     if (!board) {
@@ -391,34 +454,39 @@ const Home: React.FC = () => {
     const containerHeight = TILE_H + dy * (maxLen - 1);
 
     const wrapperRef = useRef<HTMLDivElement | null>(null);
+    const boardContainerRef = useRef<HTMLDivElement | null>(null);
     const [containerZoom, setContainerZoom] = useState<number>(1);
 
     useEffect(() => {
       const el = wrapperRef.current;
       if (!el) return;
 
-      const recalc = () => {
-        const w = el.clientWidth || containerWidth;
-        const z = Math.min(1, w / containerWidth);
-        setContainerZoom((players===6) ? z : z*1.1);
+      const adjust = () => {
+        // Base zoom via CSS zoom so it respects dvw precisely
+        const dvw = window.innerWidth;
+        const desired = Math.min(1, dvw / containerWidth);
+        setContainerZoom(1);
+        if (boardContainerRef.current) {
+          (boardContainerRef.current as HTMLDivElement).style.zoom = String(desired);
+        }
       };
 
-      recalc();
+      adjust();
 
-      const ro = new ResizeObserver(recalc);
+      const ro = new ResizeObserver(adjust);
       ro.observe(el);
-      window.addEventListener('resize', recalc);
-      window.addEventListener('load', recalc);
+      window.addEventListener('resize', adjust);
+      window.addEventListener('load', adjust);
       return () => {
         ro.disconnect();
-        window.removeEventListener('resize', recalc);
-        window.removeEventListener('load', recalc);
+        window.removeEventListener('resize', adjust);
+        window.removeEventListener('load', adjust);
       };
     }, [board, containerWidth]);
 
     return (
       <div className="relative w-full h-[420px] sm:h-[520px] md:h-[560px] select-none" id="catan-map-container" ref={wrapperRef}>
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+        <div id="board-container" ref={boardContainerRef} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
           style={{ width: containerWidth, height: containerHeight + 45, transform: `scale(${containerZoom})`, transformOrigin: 'center' }}>
           {/* Tile field centered inside the scaled box */}
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ width: containerWidth, height: containerHeight }}>
@@ -494,7 +562,7 @@ const Home: React.FC = () => {
         {/* Header */}
         <div className="px-5 pt-6 pb-4">
           <h1 className="h-9 flex items-center justify-between gap-2 select-none">
-          <button aria-label="Back" className="p-2 relative">
+          <button aria-label="Back" className="p-2 relative opacity-0">
               <div className="w-[32px] h-[32px] rounded-full flex items-center justify-center" style={{ background: 'rgba(255, 255, 255, 0.15)', backgroundBlendMode: 'overlay', backdropFilter: 'blur(20px)', boxShadow: '-1px -1px 0px 0px rgb(7, 251, 211), 0px -1px 0px 0px rgb(7, 251, 211)' }} >
               <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <path d="M15 19l-7-7 7-7" />
@@ -573,9 +641,9 @@ const Home: React.FC = () => {
 
         </div>
         {/* Right Sidebar Drawer */}
-        <div className={`fixed inset-0 z-[60] transition-opacity ${menuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} onClick={() => setMenuOpen(false)} aria-hidden={!menuOpen} />
-        <div className={`fixed right-0 top-0 bottom-0 z-[61] w-[320px] max-w-[85vw] bg-gradient-to-b from-[#1B0F3E] to-[#120A28] border-l border-white/10 transition-transform duration-300 ${menuOpen ? 'translate-x-0' : 'translate-x-full'}`} role="dialog" aria-modal="true">
-          <div className="h-full flex flex-col">
+        <div className={`absolute inset-0 z-[60] transition-opacity ${menuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} onClick={() => setMenuOpen(false)} aria-hidden={!menuOpen} />
+        <div className={`absolute right-0 top-0 bottom-0 z-[61] w-[320px] max-w-[85vw] bg-gradient-to-b from-[#1B0F3E] to-[#120A28] border-l border-white/10 transition-transform duration-300 ${menuOpen ? 'translate-x-0' : 'translate-x-full'}`} role="dialog" aria-modal="true">
+          <div className="h-full flex flex-col" style={{ paddingTop: 'var(--safe-top)', paddingBottom: 'var(--safe-bottom)' }}>
             <div className="p-5 border-b border-white/10 flex items-center gap-3">
               <svg className="w-10 h-10 text-white" viewBox="0 0 100 100" aria-hidden>
                 <defs>
@@ -607,7 +675,7 @@ const Home: React.FC = () => {
                 </button>
               </div>
               <div className="pt-2">
-                <button onClick={startNewGame} className="w-full h-10 rounded-md border border-white/15 bg-white/10 hover:bg-white/15 text-white text-sm" style={{ boxShadow: '-1px -1px 0px 0px rgb(255, 83, 192), 0px -1px 0px 0px rgb(255, 83, 192)' }}>New game</button>
+                <button onClick={startNewGame} className="w-full h-10 rounded-md border border-white/15 bg-gradient-to-br from-[#B6116B] to-[#3B1578] text-white text-sm" style={{ boxShadow: '-1px -1px 0px 0px rgb(255, 83, 192), 0px -1px 0px 0px rgb(255, 83, 192)' }}>New game</button>
               </div>
               <div className="mt-4 flex-1 flex flex-col min-h-0">
                 <div className="text-white/70 mb-2">Load game</div>
@@ -629,6 +697,40 @@ const Home: React.FC = () => {
                   {recentGames.length === 0 && (<div className="text-xs text-white/60">No saved games yet</div>)}
                 </div>
               </div>
+            </div>
+            <div className="p-5 border-t border-white/10" style={{ paddingBottom: 'var(--safe-bottom)' }}>
+              {isAuthenticated ? (
+                  <div className="w-full flex flex-col gap-3">
+                  <div className="w-full flex items-center gap-3">
+                  <img src={user?.imageUrl || ''} alt="avatar" className="w-9 h-9 rounded-full bg-white/20" loading="eager" decoding="async" referrerPolicy="no-referrer" crossOrigin="anonymous" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm truncate">{user?.name}</div>
+                    <div className="text-xs text-white/70 truncate">{user?.email}</div>
+                  </div>
+                  <button onClick={signOut} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Sign out</button>
+                  </div>
+                  <div className="w-full grid grid-cols-2 gap-2">
+                    <button onClick={handleBackup} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Backup</button>
+                    <button onClick={handleRestore} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Restore</button>
+                  </div>
+                  <div className="w-full flex items-center justify-between text-xs text-white/80">
+                    <div className="flex flex-col"><span>Last backup:</span><span>{lastBackupAt ? new Date(lastBackupAt).toLocaleString() : '—'}</span></div>
+                    <label className="inline-flex items-center gap-1 cursor-pointer">
+                      <input type="checkbox" checked={autoBackupEnabled} onChange={e=>setAutoBackupEnabled(e.target.checked)} />
+                      Auto backup
+                    </label>
+                  </div>
+                  <div className="w-full grid grid-cols-2 gap-2">
+                    <button onClick={handleExportFile} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Export file</button>
+                    <label className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs flex items-center justify-center cursor-pointer">
+                      Import file
+                      <input type="file" accept="application/json" onChange={handleImportFile} className="hidden" />
+                    </label>
+                  </div>
+                </div>
+              ) : (
+                <GoogleSignInButton onClick={signIn} variant="full" className="w-full" aria-label="Sign in with Google" />
+              )}
             </div>
           </div>
         </div>

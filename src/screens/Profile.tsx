@@ -1,8 +1,62 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import LiquidGlassCard from '../components/LiquidGlassCard';
+import GoogleSignInButton from '../components/GoogleSignInButton';
+import { useAuth } from '../auth/AuthProvider';
+import { createOrUpdateAppDataJson, readAppDataJson, exportAllLocalStorage, importAllToLocalStorage } from '../drive/driveClient';
+import { exportLocalToFile, importLocalFromFile } from '../drive/localExport';
+import { useSync } from '../drive/SyncProvider';
 
 const Profile: React.FC = () => {
+  const { isAuthenticated, user, signIn, signOut, getAccessToken } = useAuth();
+  const { lastBackupAt, autoBackupEnabled, setAutoBackupEnabled } = useSync();
+
+  async function handleBackup() {
+    try {
+      const token = await getAccessToken();
+      if (!token) return;
+      const snapshot = exportAllLocalStorage();
+      await createOrUpdateAppDataJson(token, 'app_data.json', { snapshot, ts: Date.now() });
+      alert('Backup complete to Drive AppData.');
+    } catch (e) {
+      alert('Backup failed.');
+    }
+  }
+
+  async function handleRestore() {
+    try {
+      const token = await getAccessToken();
+      if (!token) return;
+      const data = await readAppDataJson<{ snapshot: Record<string,string> }>(token, 'app_data.json');
+      if (data?.snapshot) {
+        importAllToLocalStorage(data.snapshot);
+        alert('Restore complete. Restarting screen…');
+        window.location.reload();
+      } else {
+        alert('No backup found.');
+      }
+    } catch (e) {
+      alert('Restore failed.');
+    }
+  }
+
+  function handleExportFile() {
+    exportLocalToFile()
+  }
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]
+    if (!f) return
+    try {
+      await importLocalFromFile(f)
+      alert('Imported backup. Restarting screen…')
+      window.location.reload()
+    } catch {
+      alert('Import failed: invalid file')
+    } finally {
+      e.currentTarget.value = ''
+    }
+  }
   // device presets removed – full-viewport rendering
   // removed unused impactAnchor and measurement refs
   const navigate = useNavigate();
@@ -155,7 +209,7 @@ const Profile: React.FC = () => {
         {/* Header */}
         <div className="px-5 pt-6 pb-4">
           <h1 className="h-9 flex items-center justify-between gap-2 select-none">
-          <button aria-label="Back" className="p-2 relative">
+          <button aria-label="Back" className="p-2 relative opacity-0">
               <div className="w-[32px] h-[32px] rounded-full flex items-center justify-center" style={{ background: 'rgba(255, 255, 255, 0.15)', backgroundBlendMode: 'overlay', backdropFilter: 'blur(20px)', boxShadow: '-1px -1px 0px 0px rgb(7, 251, 211), 0px -1px 0px 0px rgb(7, 251, 211)' }} >
               <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <path d="M15 19l-7-7 7-7" />
@@ -178,10 +232,12 @@ const Profile: React.FC = () => {
           </h1>
         </div>
 
+        {/* Scrollable content area */}
+        <div className="absolute left-0 right-0 scroll-y" style={{ top: 'calc(76px + var(--safe-top))', bottom: 'calc(64px + var(--safe-bottom))' }}>
         {/* Current game hero */}
-        <div className="px-5 mt-3" style={{ marginTop: 'calc(0.75rem + var(--safe-top))' }}>
+        <div className="px-5 mt-3">
           <LiquidGlassCard className="w-full rounded-2xl p-4" style={{ borderRadius: '1rem' }}>
-            <div className="flex items-center justify-between">
+            <div className="w-full flex items-center justify-between">
               <div>
                 <div className="text-sm text-white/70">Current game</div>
                 <div className="text-lg font-semibold">{gameName}</div>
@@ -222,7 +278,7 @@ const Profile: React.FC = () => {
               {(() => {
                 const counts: number[] = Array.from({ length: 11 }, (_, i) => currentRolls.filter(r => r.total === (i+2)).length);
                 const max = Math.max(1, ...counts);
-                const BAR_PX_TOTAL = 64; // h-16
+                const BAR_PX_TOTAL = 50; // h-16
                 return counts.map((c, idx) => {
                   const barPx = Math.max(2, Math.round((c / max) * BAR_PX_TOTAL));
                   const n = idx + 2;
@@ -275,6 +331,7 @@ const Profile: React.FC = () => {
                 Start Tracking
               </Link>
           </div>
+        </div>
         </div>
 
         {/* Footer nav (placeholders) */}
@@ -329,9 +386,9 @@ const Profile: React.FC = () => {
 
         </div>
         {/* Right Sidebar Drawer */}
-        <div className={`fixed inset-0 z-[60] transition-opacity ${menuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} onClick={() => setMenuOpen(false)} aria-hidden={!menuOpen} />
-        <div className={`fixed right-0 top-0 bottom-0 z-[61] w-[320px] max-w-[85vw] bg-gradient-to-b from-[#1B0F3E] to-[#120A28] border-l border-white/10 transition-transform duration-300 ${menuOpen ? 'translate-x-0' : 'translate-x-full'}`} role="dialog" aria-modal="true">
-          <div className="h-full flex flex-col">
+        <div className={`${menuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'} absolute inset-0 z-[60] transition-opacity`} onClick={() => setMenuOpen(false)} aria-hidden={!menuOpen} />
+        <div className={`absolute right-0 top-0 bottom-0 z-[61] w-[320px] max-w-[85vw] bg-gradient-to-b from-[#1B0F3E] to-[#120A28] border-l border-white/10 transition-transform duration-300 ${menuOpen ? 'translate-x-0' : 'translate-x-full'}`} role="dialog" aria-modal="true">
+          <div className="h-full flex flex-col" style={{ paddingTop: 'var(--safe-top)', paddingBottom: 'var(--safe-bottom)' }}>
             <div className="p-5 border-b border-white/10 flex items-center gap-3">
               <svg className="w-10 h-10 text-white" viewBox="0 0 100 100" aria-hidden>
                 <defs>
@@ -363,7 +420,7 @@ const Profile: React.FC = () => {
                 </button>
               </div>
               <div className="pt-2">
-                <button onClick={startNewGame} className="w-full h-10 rounded-md border border-white/15 bg-white/10 hover:bg-white/15 text-white text-sm" style={{ boxShadow: '-1px -1px 0px 0px rgb(255, 83, 192), 0px -1px 0px 0px rgb(255, 83, 192)' }}>New game</button>
+                <button onClick={startNewGame} className="w-full h-10 rounded-md border border-white/15 bg-gradient-to-br from-[#B6116B] to-[#3B1578] text-white text-sm" style={{ boxShadow: '-1px -1px 0px 0px rgb(255, 83, 192), 0px -1px 0px 0px rgb(255, 83, 192)' }}>New game</button>
               </div>
               <div className="mt-4 flex-1 flex flex-col min-h-0">
                 <div className="text-white/70 mb-2">Load game</div>
@@ -385,6 +442,40 @@ const Profile: React.FC = () => {
                   {recentGames.length === 0 && (<div className="text-xs text-white/60">No saved games yet</div>)}
                 </div>
               </div>
+            </div>
+            <div className="p-5 border-t border-white/10" style={{ paddingBottom: 'var(--safe-bottom)' }}>
+              {isAuthenticated ? (
+                <div className="w-full flex flex-col gap-3">
+                  <div className="w-full flex items-center gap-3">
+                    <img src={user?.imageUrl || ''} alt="avatar" className="w-9 h-9 rounded-full bg-white/20" loading="eager" decoding="async" referrerPolicy="no-referrer" crossOrigin="anonymous" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm truncate">{user?.name}</div>
+                      <div className="text-xs text-white/70 truncate">{user?.email}</div>
+                    </div>
+                    <button onClick={signOut} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Sign out</button>
+                  </div>
+                  <div className="w-full grid grid-cols-2 gap-2">
+                    <button onClick={handleBackup} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Backup</button>
+                    <button onClick={handleRestore} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Restore</button>
+                  </div>
+                  <div className="w-full flex items-center justify-between text-xs text-white/80">
+                  <div className="flex flex-col"><span>Last backup:</span><span>{lastBackupAt ? new Date(lastBackupAt).toLocaleString() : '—'}</span></div>
+                    <label className="inline-flex items-center gap-1 cursor-pointer">
+                      <input type="checkbox" checked={autoBackupEnabled} onChange={e=>setAutoBackupEnabled(e.target.checked)} />
+                      Auto backup
+                    </label>
+                  </div>
+                  <div className="w-full grid grid-cols-2 gap-2">
+                    <button onClick={handleExportFile} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Export file</button>
+                    <label className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs flex items-center justify-center cursor-pointer">
+                      Import file
+                      <input type="file" accept="application/json" onChange={handleImportFile} className="hidden" />
+                    </label>
+                  </div>
+                </div>
+              ) : (
+                <GoogleSignInButton onClick={signIn} variant="full" className="w-full" aria-label="Sign in with Google" />
+              )}
             </div>
           </div>
         </div>

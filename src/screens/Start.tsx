@@ -1,14 +1,17 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import LaserFlow from '../components/LaserFlow';
+import { Suspense, lazy } from 'react';
+const LaserFlow = lazy(() => import('../components/LaserFlow'));
 import LiquidGlassCard from '../components/LiquidGlassCard';
 import GoogleSignInButton from '../components/GoogleSignInButton';
+import { useAuth } from '../auth/AuthProvider';
 
 const Start: React.FC = () => {
   // device presets removed – full-viewport rendering
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const targetRef = useRef<HTMLDivElement | null>(null);
   const [impactAnchor, setImpactAnchor] = useState<{ x: number; y: number } | null>(null);
+  const { isAuthenticated, signIn } = useAuth();
 
   useLayoutEffect(() => {
     const wrapper = wrapperRef.current;
@@ -42,11 +45,14 @@ const Start: React.FC = () => {
   }, []);
 
   return (
-    <div className="app-safe overflow-hidden bg-gradient-to-br from-[#2E1371] to-[#130B2B]">
+    <div className="app-safe relative bg-gradient-to-br from-[#2E1371] to-[#130B2B]">
+        {/* Fixed background to cover viewport during scroll to avoid white gaps */}
+        <div className="fixed inset-0 -z-10 bg-gradient-to-br from-[#2E1371] to-[#130B2B]" />
         <div className="absolute inset-0" ref={wrapperRef}>
           {/* Laser background */}
           <div className="absolute inset-0">
             {impactAnchor && (
+            <Suspense fallback={null}>
             <LaserFlow 
               color="#CF9EFF"
               horizontalBeamOffset={0.0}
@@ -69,8 +75,9 @@ const Start: React.FC = () => {
               impactAnchorPx={impactAnchor}
               coreThicknessPx={100}
               coreHeightPx={window.innerHeight}
-              
-            />)}
+            />
+            </Suspense>
+            )}
           </div>
 
 
@@ -137,7 +144,23 @@ const Start: React.FC = () => {
               <Link to="/home" className="w-full h-full py-4 px-8 flex items-center justify-center no-underline" style={{ borderRadius: '8rem', fontWeight: 'bold' }}>Get Started</Link>
             </LiquidGlassCard>
           </div>
-          <GoogleSignInButton className="w-[64px] h-[64px] bg-red rounded-full absolute left-1/2 -translate-x-1/2" style={{ top: 'calc(44% + 152px + 100px)' }} />
+          {isAuthenticated ? (
+            <div
+              className="w-[64px] h-[64px] rounded-full absolute left-1/2 -translate-x-1/2 flex items-center justify-center"
+              style={{
+                top: 'calc(44% + 152px + 100px)',
+                background: '#f2f2f2',
+                color: '#1f1f1f'
+              }}
+              aria-hidden
+            >
+              <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+            </div>
+          ) : (
+            <GoogleSignInButton onClick={signIn} className="w-[64px] h-[64px] rounded-full absolute left-1/2 -translate-x-1/2" style={{ top: 'calc(44% + 152px + 100px)' }} />
+          )}
         </div>
     </div>
   );
