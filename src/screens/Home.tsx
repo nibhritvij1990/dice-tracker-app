@@ -393,7 +393,7 @@ const Home: React.FC = () => {
             <div />
           </LiquidGlassCard>
           <div className="absolute z-[1] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" style={{ 
-            height: (players===6 ? 'calc(100% - 120px)' : 'calc(100% - 100px)'),
+            height: (players===6 ? 'calc(100% - 120px)' : (players===5 ? 'calc(100% - 60px)' : 'calc(100% - 100px)')),
             width: 'auto',
             aspectRatio: (players===5 ? '0.75 / 1' : (players===6 ? '0.9 / 1' : '0.866 / 1')),
             clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
