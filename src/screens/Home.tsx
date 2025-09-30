@@ -384,7 +384,7 @@ const Home: React.FC = () => {
         </div>
 
         {/* Board container */}
-        <div id="main-board-container" className="w-full p-4 relative overflow-hidden" style={{ height: (players===6 ? 1 * bodyvw : (players===5 ? 1.35 * bodyvw : 1.15 * bodyvw)) }}>
+        <div id="main-board-container" className="w-full p-4 relative overflow-hidden" style={{ height: (players===6 ? 1.05 * bodyvw : (players===5 ? 1.35 * bodyvw : 1.15 * bodyvw)), minHeight: (players===6 ? 1.05 * bodyvw : (players===5 ? 1.35 * bodyvw : 1.15 * bodyvw)) }}>
           <Suspense fallback={null}>
             <Iridescence color={[100, 200, 255]} className='absolute inset-0' />
           </Suspense>
@@ -412,6 +412,61 @@ const Home: React.FC = () => {
             style={{ boxShadow: '-1px -1px 0px 0px rgb(255, 83, 192), 0px -1px 0px 0px rgb(255, 83, 192)' }}>
             Generate Map
           </button>
+      </div>
+    );
+  }
+
+  function NumberToken({ value }: { value: number }) {
+    const isHot = value === 6 || value === 8;
+    const pipCountMap: Record<number, number> = { 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 8: 5, 9: 4, 10: 3, 11: 2, 12: 1 };
+    const pips = pipCountMap[value] || 0;
+
+    const ringBackground = 'conic-gradient(from 0deg, #d6b253 0deg, #f5e3a1 90deg, #a77a2f 180deg, #f0d98c 270deg, #d6b253 360deg)';
+    const innerBackground = isHot
+      ? 'radial-gradient(circle at 30% 30%, #ff7373 0%, #b71c1c 65%, #7a0e0e 100%)'
+      : 'radial-gradient(circle at 30% 30%, #fff6d9 0%, #f2e2b6 60%, #d9c397 100%)';
+    const numberColor = isHot ? '#ffffff' : '#1a1a1a';
+    const pipColor = isHot ? '#ffffff' : '#1a1a1a';
+
+    return (
+      <div className="relative" style={{ width: 28, height: 28 }} aria-label={`token-${value}`}>
+        <div
+          className="absolute inset-0 rounded-full"
+          style={{
+            background: ringBackground,
+            boxShadow: '0 3px 4px rgba(0,0,0,0.4), inset 0 0 1px rgba(255,255,255,0.6)'
+          }}
+        />
+        <div
+          className="absolute rounded-full flex flex-col items-center justify-start"
+          style={{
+            left: 2.5,
+            top: 2.5,
+            right: 2.5,
+            bottom: 2.5,
+            background: innerBackground,
+            boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.35), 0 1px 0 rgba(255,255,255,0.3)'
+          }}
+        >
+          <div style={{ color: numberColor }} className="leading-none" >
+            <span className="text-[13px] font-extrabold">{value}</span>
+          </div>
+          <div className="flex gap-[1px] mt-[1px]" aria-hidden>
+            {Array.from({ length: pips }).map((_, i) => (
+              <span
+                key={i}
+                className="block rounded-full"
+                style={{
+                  width: 2,
+                  height: 2,
+                  background: pipColor,
+                  opacity: isHot ? 0.95 : 0.8,
+                  filter: 'drop-shadow(0 0.25px 0 rgba(0,0,0,0.3))'
+                }}
+              />
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -503,10 +558,8 @@ const Home: React.FC = () => {
                     <div key={`${cAbs}-${i}`} className="absolute" style={{ left, top, width: TILE_W, height: TILE_H, zIndex: 1 }}>
                       <div className="w-full h-full" style={{ clipPath: 'polygon(0% 50%, 25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%)', backgroundColor: terrainColor[tile.terrain], backgroundImage: `url(${terrainImage[tile.terrain]})`, backgroundSize: '100% 100%', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }} />
                       {tile.terrain !== 'desert' && tile.number !== null && (
-                        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-                          <div className={`flex items-center justify-center rounded-full ${tile.number===6||tile.number===8 ? 'bg-[#B71C1C] text-white' : 'bg-[#f6e6c9] text-black'}`} style={{ width: 28, height: 28, border: '1px solid rgba(0,0,0,0.2)' }}>
-                            <span className="text-xs font-semibold">{tile.number}</span>
-                          </div>
+                        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[5]">
+                          <NumberToken value={tile.number} />
                         </div>
                       )}
                     </div>
@@ -536,10 +589,8 @@ const Home: React.FC = () => {
                   <div key={`${pos.r}-${pos.j}`} className="absolute" style={{ left, top, width: TILE_W, height: TILE_H, zIndex: 1 }}>
                     <div className="w-full h-full" style={{ clipPath: 'polygon(0% 50%, 25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%)', backgroundColor: terrainColor[tile.terrain], backgroundImage: `url(${terrainImage[tile.terrain]})`, backgroundSize: '100% 100%', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }} />
                     {tile.terrain !== 'desert' && tile.number !== null && (
-                      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-                        <div className={`flex items-center justify-center rounded-full ${tile.number===6||tile.number===8 ? 'bg-[#B71C1C] text-white' : 'bg-[#f6e6c9] text-black'}`} style={{ width: 28, height: 28, border: '1px solid rgba(0,0,0,0.2)' }}>
-                          <span className="text-xs font-semibold">{tile.number}</span>
-                        </div>
+                      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[5]">
+                        <NumberToken value={tile.number} />
                       </div>
                     )}
                   </div>
