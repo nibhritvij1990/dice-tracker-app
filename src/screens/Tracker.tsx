@@ -249,6 +249,13 @@ const Tracker: React.FC = () => {
   const [dicePlaceholder, setDicePlaceholder] = useState<boolean>(true);
   const rollingRef = useRef<number | null>(null);
   const [isRolling, setIsRolling] = useState(false);
+  const [pulseKey, setPulseKey] = useState(0);
+  const [targetValues, setTargetValues] = useState<{a: number; b: number} | null>(null);
+  const [cssKey] = useState(0);
+  const [spinPhase, setSpinPhase] = useState<'idle'|'rolling'>('idle');
+  const [spinTurns, setSpinTurns] = useState<{ ax: number; ay: number; bx: number; by: number }>({ ax: 0, ay: 0, bx: 0, by: 0 });
+  const [transformStep, setTransformStep] = useState<'idle'|'prep'|'go'>('idle');
+  const [rollSeq, setRollSeq] = useState(0);
 
   const addRoll = (total: number, source: RollSource, dice?: [number, number]) => {
     const entry: DiceRollEntry = {
@@ -264,27 +271,41 @@ const Tracker: React.FC = () => {
   const rollVirtual = () => {
     if (isRolling) return;
     setIsRolling(true);
-    const start = performance.now();
-    const duration = 900;
-    const tick = (t: number) => {
-      const elapsed = t - start;
-      // spin dice quickly
-      setDieA(Math.floor(Math.random() * 6) + 1);
-      setDieB(Math.floor(Math.random() * 6) + 1);
-      if (elapsed < duration) {
-        rollingRef.current = requestAnimationFrame(tick);
-      } else {
-        const a = Math.floor(Math.random() * 6) + 1;
-        const b = Math.floor(Math.random() * 6) + 1;
-        setDieA(a);
-        setDieB(b);
-        setIsRolling(false);
-        setDicePlaceholder(false);
-        addRoll(a + b, 'virtual', [a, b]);
+    // choose final results now; CSS will animate directly to them with extra spins
+    const a = Math.floor(Math.random() * 6) + 1;
+    const b = Math.floor(Math.random() * 6) + 1;
+    setTargetValues({ a, b });
+    // random extra full rotations on each axis so animation smoothly decelerates to the correct face
+    const ax = 2 + Math.floor(Math.random() * 2); // 2..3
+    const ay = 1 + Math.floor(Math.random() * 2); // 1..2
+    const bx = 2 + Math.floor(Math.random() * 2);
+    const by = 1 + Math.floor(Math.random() * 2);
+    setSpinTurns({ ax, ay, bx, by });
+    // two-phase transform to trigger CSS transition: prep -> go
+    setSpinPhase('rolling');
+    setTransformStep('prep');
+    setRollSeq(s => s + 1);
+    setTimeout(() => {
+      setDieA(a); setDieB(b);
+      setIsRolling(false);
+      setDicePlaceholder(false);
+      addRoll(a + b, 'virtual', [a, b]);
+      if (a === b) {
+        try { (window as any).confetti?.({ particleCount: 60, spread: 60, origin: { y: 0.35 }, scalar: 0.8 }); } catch {}
+        setPulseKey((k: number) => k + 1);
       }
-    };
-    rollingRef.current = requestAnimationFrame(tick);
+      setSpinPhase('idle');
+      setTransformStep('idle');
+    }, 1000);
   };
+
+  // Advance from prep to go on next frame to ensure transform change is animated
+  useEffect(() => {
+    if (transformStep === 'prep') {
+      const id = requestAnimationFrame(() => setTransformStep('go'));
+      return () => cancelAnimationFrame(id);
+    }
+  }, [transformStep, rollSeq]);
 
   useEffect(() => () => {
     if (rollingRef.current) cancelAnimationFrame(rollingRef.current);
@@ -310,8 +331,8 @@ const Tracker: React.FC = () => {
 
   return (
     <div className="app-safe overflow-hidden bg-gradient-to-br from-[#2E1371] to-[#130B2B] text-white relative">
-        <div className="absolute w-[300px] h-[300px] left-[-132px] top-[178px]" style={{ background: 'rgba(96, 255, 231, 0.4)', filter: 'blur(100px)' }} />
-        <div className="absolute w-[300px] h-[300px] right-[-147px] top-[375px]" style={{ background: 'rgba(255, 83, 192, 0.4)', filter: 'blur(100px)' }} />
+        <div className="absolute w-[300px] h-[300px] left-[-132px] top-[178px] z-[0]" style={{ background: 'rgba(96, 255, 231, 0.4)', filter: 'blur(100px)' }} />
+        <div className="absolute w-[300px] h-[300px] right-[-147px] top-[375px] z-[0]" style={{ background: 'rgba(255, 83, 192, 0.4)', filter: 'blur(100px)' }} />
         
         {/* Header */}
         <div className="px-5 pt-6 pb-4">
@@ -363,16 +384,101 @@ const Tracker: React.FC = () => {
 
             {mode === 'virtual' ? (
               <div className="mt-4 flex items-center justify-between gap-4">
-                {/* Dice visuals */}
-                <div className="flex items-center gap-4">
-                  {[
-                    { v: dieA },
-                    { v: dieB },
-                  ].map((d, idx) => (
-                    <div key={idx} className="w-18 h-18 sm:w-18 sm:h-18 rounded-xl bg-white text-black flex items-center justify-center text-xl sm:text-3xl font-bold shadow-[inset_0_0_0_1px_rgba(0,0,0,0.12)]" aria-label={`Die ${idx + 1}: ${dicePlaceholder ? '?' : d.v}`}>
-                      {dicePlaceholder ? '?' : d.v}
-                    </div>
-                  ))}
+                {/* CSS 3D dice visuals */}
+                <div className="flex items-center gap-5 relative">
+                  {([0,1] as const).map((i) => {
+                    const v = i===0 ? dieA : dieB;
+                    const colorClass = i===0 ? 'die-red' : 'die-yellow';
+                    const t = targetValues;
+                    // Map face value to CSS rotations (face up): 1=(0,0), 2=(0,90), 3=(0,-90), 4=(0,180), 5=(90,0), 6=(-90,0)
+                    const baseRot = (val: number): { rx: number; ry: number } => {
+                      // Base rotations in degrees for top face
+                      // +Z = 5, -Z = 2, +Y = 1, -Y = 6, +X = 3, -X = 4
+                      switch(val){
+                        case 1: return { rx: -90, ry: 0 }; // +Y up
+                        case 2: return { rx: 0, ry: 180 }; // -Z up
+                        case 3: return { rx: 0, ry: -90 }; // +X up
+                        case 4: return { rx: 0, ry: 90 };  // -X up
+                        case 5: return { rx: 0, ry: 0 };   // +Z up
+                        case 6: return { rx: 90, ry: 0 };  // -Y up
+                        default: return { rx: 0, ry: 0 };
+                      }
+                    };
+                    // Determine base/current and target transforms
+                    const currentVal = v; // current visible face before roll
+                    const targetVal = t ? (i===0 ? t.a : t.b) : v;
+                    const cur = baseRot(currentVal);
+                    const tar = baseRot(targetVal);
+                    const spins = spinPhase==='rolling' ? (i===0 ? { sx: spinTurns.ax, sy: spinTurns.ay } : { sx: spinTurns.bx, sy: spinTurns.by }) : { sx: 0, sy: 0 };
+                    const transform = transformStep==='prep'
+                      ? `rotateX(${cur.rx}deg) rotateY(${cur.ry}deg)`
+                      : `rotateX(${tar.rx + spins.sx*360}deg) rotateY(${tar.ry + spins.sy*360}deg)`;
+                    return (
+                      <div key={`${i}-${cssKey}`} className="dice-scene" style={{ ['--size' as any]: '72px' }}>
+                        <div className="dice-wrapper">
+                          <div className={`dice ${colorClass} ${spinPhase==='rolling' ? 'rolling' : ''}`} style={{ transform }}>
+                            {/* hairline edges to avoid gaps */}
+                            <div className="absolute inset-0 rounded-[8px]" style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.04) inset, 0 0 0 0.5px rgba(0,0,0,0.05)' }} />
+                            {/* +Y face (1) */}
+                            <div className="face" style={{ transform: 'rotateX(90deg) translateZ(37px)' }}>
+                              <div className="face-surface" />
+                              <div className="edge-strip top" />
+                              <div className="edge-strip bottom" />
+                              <div className="edge-strip left" />
+                              <div className="edge-strip right" />
+                              <div className="pip" style={{ left: '50%', top: '50%' }} />
+                            </div>
+                            {/* -Y face (6) */}
+                            <div className="face" style={{ transform: 'rotateX(-90deg) translateZ(37px)' }}>
+                              <div className="face-surface" />
+                              <div className="edge-strip top" />
+                              <div className="edge-strip bottom" />
+                              <div className="edge-strip left" />
+                              <div className="edge-strip right" />
+                              {[[-1,-1],[-1,0],[-1,1],[1,-1],[1,0],[1,1]].map(([x,y],k)=>(<div key={k} className="pip" style={{ left:`${50 + x*25}%`, top:`${50 + y*25}%` }} />))}
+                            </div>
+                            {/* +X face (3) */}
+                            <div className="face" style={{ transform: 'rotateY(90deg) translateZ(37px)' }}>
+                              <div className="face-surface" />
+                              <div className="edge-strip top" />
+                              <div className="edge-strip bottom" />
+                              <div className="edge-strip left" />
+                              <div className="edge-strip right" />
+                              {[[-1,-1],[0,0],[1,1]].map(([x,y],k)=>(<div key={k} className="pip" style={{ left:`${50 + x*25}%`, top:`${50 + y*25}%` }} />))}
+                            </div>
+                            {/* -X face (4) */}
+                            <div className="face" style={{ transform: 'rotateY(-90deg) translateZ(37px)' }}>
+                              <div className="face-surface" />
+                              <div className="edge-strip top" />
+                              <div className="edge-strip bottom" />
+                              <div className="edge-strip left" />
+                              <div className="edge-strip right" />
+                              {[[-1,-1],[-1,1],[1,-1],[1,1]].map(([x,y],k)=>(<div key={k} className="pip" style={{ left:`${50 + x*25}%`, top:`${50 + y*25}%` }} />))}
+                            </div>
+                            {/* +Z face (5) */}
+                            <div className="face" style={{ transform: 'translateZ(37px)' }}>
+                              <div className="face-surface" />
+                              <div className="edge-strip top" />
+                              <div className="edge-strip bottom" />
+                              <div className="edge-strip left" />
+                              <div className="edge-strip right" />
+                              {[[-1,-1],[-1,1],[0,0],[1,-1],[1,1]].map(([x,y],k)=>(<div key={k} className="pip" style={{ left:`${50 + x*25}%`, top:`${50 + y*25}%` }} />))}
+                            </div>
+                            {/* -Z face (2) */}
+                            <div className="face" style={{ transform: 'rotateY(180deg) translateZ(37px)' }}>
+                              <div className="face-surface" />
+                              <div className="edge-strip top" />
+                              <div className="edge-strip bottom" />
+                              <div className="edge-strip left" />
+                              <div className="edge-strip right" />
+                              {[[-1,-1],[1,1]].map(([x,y],k)=>(<div key={k} className="pip" style={{ left:`${50 + x*25}%`, top:`${50 + y*25}%` }} />))}
+                            </div>
+                            {isRolling && (<div className="dice-shimmer" />)}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
                 <button 
                   style={{ boxShadow: '-1px -1px 0px 0px rgb(7, 251, 211), 0px -1px 0px 0px rgb(7, 251, 211)' }}
@@ -382,6 +488,16 @@ const Tracker: React.FC = () => {
                 >
                   {isRolling ? '...' : 'Roll'}
                 </button>
+                {/* Pulse ring on doubles */}
+                <div key={pulseKey} className="pointer-events-none absolute inset-0 flex items-center justify-start" />
+                {/* Aria announcements */}
+                <div aria-live="polite" className="sr-only">
+                  {isRolling ? 'Rolling virtual dice…' : `Rolled ${dieA} and ${dieB}; total ${dieA + dieB}.`}
+                </div>
+                {/* Placeholder overlay when no prior virtual roll */}
+                {dicePlaceholder && (
+                  <div className="sr-only">Waiting for first roll…</div>
+                )}
               </div>
             ) : (
               <div className="mt-4">
