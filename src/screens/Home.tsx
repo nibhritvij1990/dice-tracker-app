@@ -360,9 +360,6 @@ const Home: React.FC = () => {
       localStorage.setItem(keyFor(players), JSON.stringify({ seed: newSeed, board: b }));
     };
 
-
-    const bodyvw = document.body.clientWidth;
-
     return (
       <div className="absolute left-0 right-0 flex flex-col gap-5 scroll-y" style={{ top: 'calc(76px + var(--safe-top))', bottom: 'calc(84px + var(--safe-bottom))' }}>
         {/* Top controls */}
@@ -384,10 +381,8 @@ const Home: React.FC = () => {
           </div>
         </div>
 
-        
-
         {/* Board container */}
-        <div id="map-section-wrapper" className="w-full py-4 relative overflow-hidden" style={{ height: (players===5 ? 1.4 * bodyvw : 1.15 * bodyvw), minHeight: (players===5 ? 1.4 * bodyvw : 1.15 * bodyvw) }}>
+        <div id="board-container" className="w-full p-4 relative overflow-hidden" style={{ height: (players===4 ? '600px' : '660px'), minHeight: (players===4 ? '600px' : '660px') }}>
           <Suspense fallback={null}>
             <Iridescence color={[100, 200, 255]} className='absolute inset-0' />
           </Suspense>
@@ -398,14 +393,14 @@ const Home: React.FC = () => {
             <div />
           </LiquidGlassCard>
           <div className="absolute z-[1] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" style={{ 
-            width: 0.925 * bodyvw,
-            
-            aspectRatio: (players===5 ? '0.72 / 1' : (players===6 ? '0.95 / 1' : '0.866 / 1')),
-            clipPath: (players===5 ? "polygon(50% 0%, 100% 20%, 100% 80%, 50% 100%, 0% 80%, 0% 20%)" : "polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)"),
+            height: (players===6 ? 'calc(100% - 120px)' : (players===5 ? 'calc(100% - 60px)' : 'calc(100% - 100px)')),
+            width: 'auto',
+            aspectRatio: (players===5 ? '0.75 / 1' : (players===6 ? '0.9 / 1' : '0.866 / 1')),
+            clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
             background: 'rgba(255, 255, 255, 0.2)',
             filter: 'drop-shadow(0 2px 2px rgba(200, 200, 200, 0.5)) blur(2px)'
            }} />
-          <div className="absolute z-[2] w-full h-full top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+          <div className="absolute z-[2] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
             <CatanBoard board={board} players={players} />
           </div>
         </div>
@@ -416,61 +411,6 @@ const Home: React.FC = () => {
             style={{ boxShadow: '-1px -1px 0px 0px rgb(255, 83, 192), 0px -1px 0px 0px rgb(255, 83, 192)' }}>
             Generate Map
           </button>
-      </div>
-    );
-  }
-
-  function NumberToken({ value }: { value: number }) {
-    const isHot = value === 6 || value === 8;
-    const pipCountMap: Record<number, number> = { 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 8: 5, 9: 4, 10: 3, 11: 2, 12: 1 };
-    const pips = pipCountMap[value] || 0;
-
-    const ringBackground = 'conic-gradient(from 0deg, #d6b253 0deg, #f5e3a1 90deg, #a77a2f 180deg, #f0d98c 270deg, #d6b253 360deg)';
-    const innerBackground = isHot
-      ? 'radial-gradient(circle at 30% 30%, #ff7373 0%, #b71c1c 65%, #7a0e0e 100%)'
-      : 'radial-gradient(circle at 30% 30%, #fff6d9 0%, #f2e2b6 60%, #d9c397 100%)';
-    const numberColor = isHot ? '#ffffff' : '#1a1a1a';
-    const pipColor = isHot ? '#ffffff' : '#1a1a1a';
-
-    return (
-      <div className="relative" style={{ width: 28, height: 28 }} aria-label={`token-${value}`}>
-        <div
-          className="absolute inset-0 rounded-full"
-          style={{
-            background: ringBackground,
-            boxShadow: '0 3px 4px rgba(0,0,0,0.4), inset 0 0 1px rgba(255,255,255,0.6)'
-          }}
-        />
-        <div
-          className="absolute rounded-full flex flex-col items-center justify-start"
-          style={{
-            left: 2.5,
-            top: 2.5,
-            right: 2.5,
-            bottom: 2.5,
-            background: innerBackground,
-            boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.35), 0 1px 0 rgba(255,255,255,0.3)'
-          }}
-        >
-          <div style={{ color: numberColor }} className="leading-none" >
-            <span className="text-[13px] font-extrabold">{value}</span>
-          </div>
-          <div className="flex gap-[1px] mt-[1px]" aria-hidden>
-            {Array.from({ length: pips }).map((_, i) => (
-              <span
-                key={i}
-                className="block rounded-full"
-                style={{
-                  width: 2,
-                  height: 2,
-                  background: pipColor,
-                  opacity: isHot ? 0.95 : 0.8,
-                  filter: 'drop-shadow(0 0.25px 0 rgba(0,0,0,0.3))'
-                }}
-              />
-            ))}
-          </div>
-        </div>
       </div>
     );
   }
@@ -515,17 +455,17 @@ const Home: React.FC = () => {
 
     const wrapperRef = useRef<HTMLDivElement | null>(null);
     const boardContainerRef = useRef<HTMLDivElement | null>(null);
-    const [containerZoom] = useState<number>(1);
-
-    const bodyvw = document.body.clientWidth;
+    const [containerZoom, setContainerZoom] = useState<number>(1);
 
     useEffect(() => {
       const el = wrapperRef.current;
       if (!el) return;
 
       const adjust = () => {
-        
-        const desired = 0.85 * bodyvw / containerWidth;
+        const dvw = window.innerWidth;
+        const desired = Math.min(1, dvw / containerWidth);
+        if (players===6) setContainerZoom(1);
+        else setContainerZoom(1.2);
         if (boardContainerRef.current) {
           (boardContainerRef.current as HTMLDivElement).style.zoom = String(desired);
         }
@@ -545,8 +485,8 @@ const Home: React.FC = () => {
     }, [board, containerWidth]);
 
     return (
-      <div className="relative w-full h-full select-none" id="catan-map-container" ref={wrapperRef}>
-        <div id="main-board-container" ref={boardContainerRef} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+      <div className="relative w-full h-[420px] sm:h-[520px] md:h-[560px] select-none" id="catan-map-container" ref={wrapperRef}>
+        <div id="board-container" ref={boardContainerRef} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
           style={{ width: containerWidth, height: containerHeight + 45, transform: `scale(${containerZoom})`, transformOrigin: 'center' }}>
           {/* Tile field centered inside the scaled box */}
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ width: containerWidth, height: containerHeight }}>
@@ -565,7 +505,9 @@ const Home: React.FC = () => {
                       <div className="w-full h-full" style={{ clipPath: 'polygon(0% 50%, 25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%)', backgroundColor: terrainColor[tile.terrain], backgroundImage: `url(${terrainImage[tile.terrain]})`, backgroundSize: '100% 100%', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }} />
                       {tile.terrain !== 'desert' && tile.number !== null && (
                         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-                          <NumberToken value={tile.number} />
+                          <div className={`flex items-center justify-center rounded-full ${tile.number===6||tile.number===8 ? 'bg-[#B71C1C] text-white' : 'bg-[#f6e6c9] text-black'}`} style={{ width: 28, height: 28, border: '1px solid rgba(0,0,0,0.2)' }}>
+                            <span className="text-xs font-semibold">{tile.number}</span>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -596,7 +538,9 @@ const Home: React.FC = () => {
                     <div className="w-full h-full" style={{ clipPath: 'polygon(0% 50%, 25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%)', backgroundColor: terrainColor[tile.terrain], backgroundImage: `url(${terrainImage[tile.terrain]})`, backgroundSize: '100% 100%', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }} />
                     {tile.terrain !== 'desert' && tile.number !== null && (
                       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-                        <NumberToken value={tile.number} />
+                        <div className={`flex items-center justify-center rounded-full ${tile.number===6||tile.number===8 ? 'bg-[#B71C1C] text-white' : 'bg-[#f6e6c9] text-black'}`} style={{ width: 28, height: 28, border: '1px solid rgba(0,0,0,0.2)' }}>
+                          <span className="text-xs font-semibold">{tile.number}</span>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -612,8 +556,8 @@ const Home: React.FC = () => {
 
   return (
     <div className="app-safe overflow-hidden bg-gradient-to-br from-[#2E1371] to-[#130B2B] text-white relative">
-        <div className="absolute w-[300px] h-[300px] left-[-132px] top-[178px] z-[0]" style={{ background: 'rgba(96, 255, 231, 0.4)', filter: 'blur(100px)' }} />
-        <div className="absolute w-[300px] h-[300px] right-[-147px] top-[375px] z-[0]" style={{ background: 'rgba(255, 83, 192, 0.4)', filter: 'blur(100px)' }} />
+        <div className="absolute w-[300px] h-[300px] left-[-132px] top-[178px]" style={{ background: 'rgba(96, 255, 231, 0.4)', filter: 'blur(100px)' }} />
+        <div className="absolute w-[300px] h-[300px] right-[-147px] top-[375px]" style={{ background: 'rgba(255, 83, 192, 0.4)', filter: 'blur(100px)' }} />
         
         {/* Header */}
         <div className="px-5 pt-6 pb-4">
