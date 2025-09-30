@@ -360,6 +360,8 @@ const Home: React.FC = () => {
       localStorage.setItem(keyFor(players), JSON.stringify({ seed: newSeed, board: b }));
     };
 
+    const bodyvw = document.body.clientWidth;
+
     return (
       <div className="absolute left-0 right-0 flex flex-col gap-5 scroll-y" style={{ top: 'calc(76px + var(--safe-top))', bottom: 'calc(84px + var(--safe-bottom))' }}>
         {/* Top controls */}
@@ -382,7 +384,7 @@ const Home: React.FC = () => {
         </div>
 
         {/* Board container */}
-        <div id="board-container" className="w-full p-4 relative overflow-hidden" style={{ height: (players===4 ? '600px' : '660px'), minHeight: (players===4 ? '600px' : '660px') }}>
+        <div id="main-board-container" className="w-full p-4 relative overflow-hidden" style={{ height: (players===6 ? 1 * bodyvw : (players===5 ? 1.35 * bodyvw : 1.15 * bodyvw)) }}>
           <Suspense fallback={null}>
             <Iridescence color={[100, 200, 255]} className='absolute inset-0' />
           </Suspense>
@@ -393,10 +395,9 @@ const Home: React.FC = () => {
             <div />
           </LiquidGlassCard>
           <div className="absolute z-[1] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" style={{ 
-            height: (players===6 ? 'calc(100% - 120px)' : (players===5 ? 'calc(100% - 60px)' : 'calc(100% - 100px)')),
-            width: 'auto',
-            aspectRatio: (players===5 ? '0.75 / 1' : (players===6 ? '0.9 / 1' : '0.866 / 1')),
-            clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+            width: 0.925 * bodyvw,
+            aspectRatio: (players===5 ? '0.725 / 1' : (players===6 ? '1 / 1' : '0.866 / 1')),
+            clipPath: (players===5 ? 'polygon(50% 0%, 100% 20%, 100% 80%, 50% 100%, 0% 80%, 0% 20%)' : 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)'),
             background: 'rgba(255, 255, 255, 0.2)',
             filter: 'drop-shadow(0 2px 2px rgba(200, 200, 200, 0.5)) blur(2px)'
            }} />
@@ -455,17 +456,15 @@ const Home: React.FC = () => {
 
     const wrapperRef = useRef<HTMLDivElement | null>(null);
     const boardContainerRef = useRef<HTMLDivElement | null>(null);
-    const [containerZoom, setContainerZoom] = useState<number>(1);
+    const [containerZoom] = useState<number>(1);
 
     useEffect(() => {
       const el = wrapperRef.current;
       if (!el) return;
 
       const adjust = () => {
-        const dvw = window.innerWidth;
-        const desired = Math.min(1, dvw / containerWidth);
-        if (players===6) setContainerZoom(1);
-        else setContainerZoom(1.2);
+        const dvw = document.body.clientWidth;
+        const desired = 0.85 * dvw / containerWidth;
         if (boardContainerRef.current) {
           (boardContainerRef.current as HTMLDivElement).style.zoom = String(desired);
         }
@@ -485,7 +484,7 @@ const Home: React.FC = () => {
     }, [board, containerWidth]);
 
     return (
-      <div className="relative w-full h-[420px] sm:h-[520px] md:h-[560px] select-none" id="catan-map-container" ref={wrapperRef}>
+      <div className="relative w-full select-none" id="catan-map-container" ref={wrapperRef}>
         <div id="board-container" ref={boardContainerRef} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
           style={{ width: containerWidth, height: containerHeight + 45, transform: `scale(${containerZoom})`, transformOrigin: 'center' }}>
           {/* Tile field centered inside the scaled box */}
