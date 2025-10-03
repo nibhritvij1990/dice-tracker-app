@@ -663,7 +663,7 @@ const Home5: React.FC = () => {
         if (target) {
           const scale = isDesktop ? (0.8 * desired) : desired;
           const headerZoom = (lastHeaderZoomRef.current ?? 1);
-          const yTranslate = isDesktop ? (headerZoom < 0.8 ? '0%' : '5%') : '-50%';
+          const yTranslate = isDesktop ? (headerZoom < 0.8 ? '0%' : '5%') : '0%';
           target.style.transform = `translate(-50%, ${yTranslate}) scale(${scale})`;
           target.style.transformOrigin = 'top';
           try { window.dispatchEvent(new CustomEvent('home5:boardZoomed')); } catch {}
