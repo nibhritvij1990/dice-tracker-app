@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+@media (min-width: 100dvh) {
+  html, body, #root {
+    max-width: 100dvw;
+    margin: 0 auto;
+    position: relative;
+    background: transparent;
+  }
+  #root {
+    box-shadow: 0px 0px 0px 0px #ffffff00;
+  }
+  .app-safe {
+    background: linear-gradient(0deg, #2E1371, #130B2B);
+  }
+}
+

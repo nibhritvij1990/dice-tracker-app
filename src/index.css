@@ -13,10 +13,7 @@
     max-width: 40dvw;
     margin: 0 auto;
     position: relative;
-    background: linear-gradient(225deg, #2E1371, #130B2B);
-  }
-  #root {
-    box-shadow: 0px 0px 16px 0px #ffffff44;
+    background: transparent;
   }
 }
 
@@ -98,6 +95,7 @@
   height: 8px;
   background: radial-gradient(ellipse at center, rgba(0,0,0,0.35), rgba(0,0,0,0) 70%);
   filter: blur(2px);
+  z-index: -1;
 }
 .dice {
   position: absolute;
@@ -137,9 +135,24 @@
   position: absolute;
   inset: -5%;
   border-radius: 12px;
-  background: var(--base);
+  /* Subtle plastic: soft highlight + base color */
+  background:
+    linear-gradient(145deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 40%),
+    radial-gradient(80% 80% at 30% 30%, rgba(255,255,255,0.06), rgba(255,255,255,0) 60%),
+    var(--base);
+  box-shadow:
+    inset 0 0.5px 0 rgba(255,255,255,0.4),
+    inset 0 -1px 0 rgba(0,0,0,0.15),
+    0 2px 4px rgba(0,0,0,0.18);
 }
 .dice .pip { background: var(--pip); }
+.dice .pip {
+  /* Slightly inset painted pip */
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,0.05),
+    inset 0 1px 1px rgba(255,255,255,0.25),
+    inset 0 -1px 1px rgba(0,0,0,0.2);
+}
 
 /* Edge strips to mask seams */
 .edge-strip { position: absolute; background: var(--base); pointer-events: none; }
@@ -159,9 +172,9 @@
   position: absolute;
   inset: 0;
   border-radius: 12px;
-  background: linear-gradient(120deg, rgba(255,255,255,0) 40%, rgba(255,255,255,0.35) 50%, rgba(255,255,255,0) 60%);
+  background: linear-gradient(120deg, rgba(255,255,255,0) 44%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0) 56%);
   background-size: 220% 100%;
-  animation: shimmer-move 900ms linear infinite;
+  animation: shimmer-move 1400ms linear infinite;
   pointer-events: none;
 }
 @keyframes shimmer-move {

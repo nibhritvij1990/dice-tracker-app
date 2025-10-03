@@ -28,6 +28,21 @@ const Home: React.FC = () => {
   const { isAuthenticated, user, signIn, signOut, getAccessToken } = useAuth();
   const { lastBackupAt, autoBackupEnabled, setAutoBackupEnabled } = useSync();
 
+  function formatBackup(ts: number) {
+    try {
+      const d = new Date(ts);
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const yy = String(d.getFullYear()).slice(-2);
+      let h = d.getHours();
+      const m = String(d.getMinutes()).padStart(2, '0');
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      h = h % 12; if (h === 0) h = 12;
+      const hh = String(h).padStart(2, '0');
+      return `${dd}/${mm}/${yy} ${hh}:${m} ${ampm}`;
+    } catch { return '—'; }
+  }
+
   async function handleBackup() {
     try {
       const token = await getAccessToken();
@@ -360,7 +375,10 @@ const Home: React.FC = () => {
       localStorage.setItem(keyFor(players), JSON.stringify({ seed: newSeed, board: b }));
     };
 
+    const safeTop = Number(getComputedStyle(document.documentElement).getPropertyValue('--safe-top').replace('px', '')) || 0;
+    const safeBottom = Number(getComputedStyle(document.documentElement).getPropertyValue('--safe-bottom').replace('px', '')) || 0;
     const bodyvw = document.body.clientWidth;
+    const bodyvh = document.body.clientHeight - 320 - safeBottom - safeTop;
 
     return (
       <div className="absolute left-0 right-0 flex flex-col gap-5 scroll-y" style={{ top: 'calc(76px + var(--safe-top))', bottom: 'calc(84px + var(--safe-bottom))' }}>
@@ -384,7 +402,7 @@ const Home: React.FC = () => {
         </div>
 
         {/* Board container */}
-        <div id="main-board-container" className="w-full p-4 relative overflow-hidden" style={{ height: (players===6 ? 1.05 * bodyvw : (players===5 ? 1.35 * bodyvw : 1.15 * bodyvw)), minHeight: (players===6 ? 1.05 * bodyvw : (players===5 ? 1.35 * bodyvw : 1.15 * bodyvw)) }}>
+        <div id="main-board-container" className="w-full p-4 relative overflow-hidden" style={{ height: (players===6 ? Math.min(1.05 * bodyvw, bodyvh) : (players===5 ? Math.min(1.35 * bodyvw, bodyvh) : Math.min(1.15 * bodyvw, bodyvh))), minHeight: (players===6 ? Math.min(1.05 * bodyvw, bodyvh) : (players===5 ? Math.min(1.35 * bodyvw, bodyvh) : Math.min(1.15 * bodyvw, bodyvh))) }}>
           <Suspense fallback={null}>
             <Iridescence color={[100, 200, 255]} className='absolute inset-0' />
           </Suspense>
@@ -396,12 +414,13 @@ const Home: React.FC = () => {
           </LiquidGlassCard>
           <div className="absolute z-[1] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" style={{ 
             width: 0.925 * bodyvw,
+            maxHeight: bodyvh - 60,
             aspectRatio: (players===5 ? '0.725 / 1' : (players===6 ? '1 / 1' : '0.866 / 1')),
             clipPath: (players===5 ? 'polygon(50% 0%, 100% 20%, 100% 80%, 50% 100%, 0% 80%, 0% 20%)' : 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)'),
             background: 'rgba(255, 255, 255, 0.2)',
             filter: 'drop-shadow(0 2px 2px rgba(200, 200, 200, 0.5)) blur(2px)'
            }} />
-          <div className="absolute z-[2] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+          <div className="absolute z-[2] w-full h-full top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
             <CatanBoard board={board} players={players} />
           </div>
         </div>
@@ -511,7 +530,6 @@ const Home: React.FC = () => {
 
     const wrapperRef = useRef<HTMLDivElement | null>(null);
     const boardContainerRef = useRef<HTMLDivElement | null>(null);
-    const [containerZoom] = useState<number>(1);
 
     useEffect(() => {
       const el = wrapperRef.current;
@@ -519,7 +537,11 @@ const Home: React.FC = () => {
 
       const adjust = () => {
         const dvw = document.body.clientWidth;
-        const desired = 0.85 * dvw / containerWidth;
+        // Use CSS env() variables for safe areas, fallback to 0 if not available
+        const safeTop = Number(getComputedStyle(document.documentElement).getPropertyValue('--safe-top').replace('px', '')) || 0;
+        const safeBottom = Number(getComputedStyle(document.documentElement).getPropertyValue('--safe-bottom').replace('px', '')) || 0;
+        const dvh = document.body.clientHeight - 320 - safeBottom - safeTop;
+        const desired = Math.min(0.85 * dvw / containerWidth, 0.8 * dvh / containerHeight);
         if (boardContainerRef.current) {
           (boardContainerRef.current as HTMLDivElement).style.zoom = String(desired);
         }
@@ -539,9 +561,9 @@ const Home: React.FC = () => {
     }, [board, containerWidth]);
 
     return (
-      <div className="relative w-full select-none" id="catan-map-container" ref={wrapperRef}>
+      <div className="relative w-full h-full select-none" id="catan-map-container" ref={wrapperRef}>
         <div id="board-container" ref={boardContainerRef} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-          style={{ width: containerWidth, height: containerHeight + 45, transform: `scale(${containerZoom})`, transformOrigin: 'center' }}>
+          style={{ width: containerWidth, height: containerHeight + 45, transformOrigin: 'center' }}>
           {/* Tile field centered inside the scaled box */}
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ width: containerWidth, height: containerHeight }}>
           {(() => {
@@ -764,7 +786,7 @@ const Home: React.FC = () => {
                     <button onClick={handleRestore} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Restore</button>
                   </div>
                   <div className="w-full flex items-center justify-between text-xs text-white/80">
-                    <div className="flex flex-col"><span>Last backup:</span><span>{lastBackupAt ? new Date(lastBackupAt).toLocaleString() : '—'}</span></div>
+                    <div className="flex flex-col"><span>Last backup:</span><span>{lastBackupAt ? formatBackup(lastBackupAt) : '—'}</span></div>
                     <label className="inline-flex items-center gap-1 cursor-pointer">
                       <input type="checkbox" checked={autoBackupEnabled} onChange={e=>setAutoBackupEnabled(e.target.checked)} />
                       Auto backup
