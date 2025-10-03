@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useLayoutEffect } from 'react';
 import '../index2.css';
 import { Link, useNavigate } from 'react-router-dom';
 import LiquidGlassCard from '../components/LiquidGlassCard';
@@ -11,6 +11,11 @@ import { useSync } from '../drive/SyncProvider';
 const Profile2: React.FC = () => {
   const { isAuthenticated, user, signIn, signOut, getAccessToken } = useAuth();
   const { lastBackupAt, autoBackupEnabled, setAutoBackupEnabled } = useSync();
+  const sidebarRef = useRef<HTMLDivElement | null>(null);
+  const [sidebarOverflow, setSidebarOverflow] = useState<boolean>(false);
+  const [authExpanded, setAuthExpanded] = useState<boolean>(false);
+  const lastZoomRef = useRef<number | null>(null);
+  const zoomRafRef = useRef<number | null>(null);
 
   function formatBackup(ts: number) {
     try {
@@ -234,12 +239,89 @@ const Profile2: React.FC = () => {
     return () => { window.removeEventListener('resize', onResize); window.removeEventListener('orientationchange', onResize); };
   }, []);
 
+  // Apply zoom to the main content box (desktop) similar to Home5, but avoid feedback loops
+  useEffect(() => {
+    const targetId = 'profile-main-content-box';
+    const applyZoomNow = () => {
+      try {
+        const el = document.getElementById(targetId) as HTMLDivElement | null;
+        if (!el) return;
+        const clientH = el.clientHeight;
+        const scrollH = el.scrollHeight;
+        if (scrollH <= 0) return;
+        let z = (clientH - 132) / scrollH;
+        // Clamp and stabilize
+        z = Math.max(0.1, Math.min(1, z));
+        z = Math.round(z * 1000) / 1000; // limit precision to reduce oscillation
+        const prev = lastZoomRef.current;
+        if (prev !== null && Math.abs(prev - z) < 0.01) return; // ignore tiny changes
+        lastZoomRef.current = z;
+        (el.style as any).zoom = String(z);
+      } catch {}
+    };
+    const schedule = () => {
+      if (zoomRafRef.current != null) return;
+      try {
+        zoomRafRef.current = requestAnimationFrame(() => {
+          zoomRafRef.current = null;
+          applyZoomNow();
+        });
+      } catch {
+        applyZoomNow();
+      }
+    };
+
+    if (!isDesktop) {
+      // Reset zoom when leaving desktop to avoid odd states
+      try {
+        const el = document.getElementById(targetId) as HTMLDivElement | null;
+        if (el) (el.style as any).zoom = '';
+      } catch {}
+      return;
+    }
+
+    // Initial
+    schedule();
+    // Events
+    const onResize = () => schedule();
+    const onLoad = () => schedule();
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+    window.addEventListener('load', onLoad);
+
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize);
+      window.removeEventListener('load', onLoad);
+      try {
+        if (zoomRafRef.current != null) cancelAnimationFrame(zoomRafRef.current);
+      } catch {}
+      zoomRafRef.current = null;
+    };
+  }, [isDesktop]);
+
+  // Measure sidebar overflow (desktop only) to decide whether to collapse auth controls
+  useLayoutEffect(() => {
+    if (!isDesktop) { setSidebarOverflow(false); setAuthExpanded(true); return; }
+    const el = sidebarRef.current;
+    if (!el) return;
+    const measure = () => {
+      const overflow = el.scrollHeight > el.clientHeight + 1;
+      setSidebarOverflow(overflow);
+      if (!overflow) setAuthExpanded(false);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    window.addEventListener('orientationchange', measure);
+    return () => { window.removeEventListener('resize', measure); window.removeEventListener('orientationchange', measure); };
+  }, [isDesktop]);
+
   if (isDesktop) {
     return (
       <div className="app-safe overflow-hidden bg-gradient-to-br from-[#2E1371] to-[#130B2B] text-white relative" style={{ minHeight: '100dvh' }}>
         <div className="relative w-full h-full flex">
           {/* Sidebar */}
-          <aside className="sticky top-0 h-screen overflow-y-auto shrink-0 w-[240px] px-4 py-6 flex flex-col justify-between z-[10]">
+          <aside ref={sidebarRef} className="sticky top-0 h-screen overflow-y-auto shrink-0 w-[240px] px-4 py-6 flex flex-col justify-between z-[10] relative">
             <div>
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-12 h-12 rounded-lg bg-white/10 flex items-center justify-center">
@@ -281,7 +363,14 @@ const Profile2: React.FC = () => {
                       <p className="font-semibold truncate max-w-[18ch]">{user?.name || ''}</p>
                       <p className="text-xs text-white/70 truncate max-w-[22ch]">{user?.email || ''}</p>
                     </div>
+                    {sidebarOverflow && (
+                      <button aria-label="Toggle controls" onClick={() => setAuthExpanded(v=>!v)} className="ml-auto p-2 rounded-md hover:bg-white/10">
+                        <svg className={`w-4 h-4 text-white transition-transform ${authExpanded ? '' : '-rotate-90'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+                      </button>
+                    )}
                   </div>
+                  {!sidebarOverflow && (
+                  <>
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <button onClick={handleBackup} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Backup</button>
                     <button onClick={handleRestore} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Restore</button>
@@ -301,16 +390,53 @@ const Profile2: React.FC = () => {
                   <div className="mt-3">
                     <button onClick={signOut} className="w-full h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Sign out</button>
                   </div>
+                  </>
+                  )}
                 </div>
               ) : (
                 <GoogleSignInButton onClick={signIn} variant="full" className="w-full" aria-label="Sign in with Google" />
+              )}
+              {/* Popup submenu for overflow */}
+              {isAuthenticated && sidebarOverflow && authExpanded && (
+                <>
+                  {/* Full-screen overlay to close on outside click */}
+                  <div className="fixed inset-0 z-[90]" onClick={() => setAuthExpanded(false)} aria-hidden />
+                  {/* Popup container */}
+                  <div className="absolute left-2 right-2 bottom-4 z-[100] rounded-xl border border-white/10 bg-[#120A28]/95 backdrop-blur p-3 shadow-2xl">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-xs text-white/70">User actions</div>
+                      <button aria-label="Close" onClick={() => setAuthExpanded(false)} className="p-1 rounded-md hover:bg-white/10">
+                        <svg className="w-4 h-4 text-white/90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button onClick={handleBackup} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Backup</button>
+                      <button onClick={handleRestore} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Restore</button>
+                      <button onClick={handleExportFile} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Export</button>
+                      <label className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs flex items-center justify-center cursor-pointer">
+                        Import
+                        <input type="file" accept="application/json" onChange={handleImportFile} className="hidden" />
+                      </label>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between text-xs text-white/80">
+                      <div className="flex flex-col"><span>Last backup:</span><span>{lastBackupAt ? formatBackup(lastBackupAt) : '—'}</span></div>
+                      <label className="inline-flex items-center gap-1 cursor-pointer">
+                        <input type="checkbox" checked={autoBackupEnabled} onChange={e=>setAutoBackupEnabled(e.target.checked)} />
+                        Auto backup
+                      </label>
+                    </div>
+                    <div className="mt-3">
+                      <button onClick={signOut} className="w-full h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Sign out</button>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           </aside>
 
           {/* Main analytics body */}
-          <main className="flex-1 p-0 m-2 overflow-hidden min-h-0 relative" style={{ borderRadius: '16px', backgroundColor: 'rgb(249 250 251 / var(--tw-bg-opacity, 1))', zIndex: 1 }}>
-            <div className="w-full h-full rounded-[16px] overflow-hidden">
+          <main className="flex-1 p-0 m-2 overflow-hidden min-h-0 relative" style={{ borderRadius: '16px', backgroundColor: 'rgb(249 250 251 / var(--tw-bg-opacity, 1))', zIndex: 1, height: 'calc(100svh - 1rem)' }}>
+            <div className="w-full h-full rounded-[16px] overflow-y-auto" id="profile-main-content-box">
               <header className="p-6">
                 <div className="flex items-start justify-between">
                   <div>

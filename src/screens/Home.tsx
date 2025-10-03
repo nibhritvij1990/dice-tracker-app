@@ -375,7 +375,6 @@ const Home: React.FC = () => {
       localStorage.setItem(keyFor(players), JSON.stringify({ seed: newSeed, board: b }));
     };
 
-
     const safeTop = Number(getComputedStyle(document.documentElement).getPropertyValue('--safe-top').replace('px', '')) || 0;
     const safeBottom = Number(getComputedStyle(document.documentElement).getPropertyValue('--safe-bottom').replace('px', '')) || 0;
     const bodyvw = document.body.clientWidth;

@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo, useRef, useState, useLayoutEffect } from 'react';
 import '../index2.css';
 import { Link, useNavigate } from 'react-router-dom';
 import LiquidGlassCard from '../components/LiquidGlassCard';
@@ -22,7 +22,6 @@ import { useAuth } from '../auth/AuthProvider';
 import { useSync } from '../drive/SyncProvider';
 import { createOrUpdateAppDataJson, readAppDataJson, exportAllLocalStorage, importAllToLocalStorage } from '../drive/driveClient';
 import { exportLocalToFile, importLocalFromFile } from '../drive/localExport';
-
 
 const Home5: React.FC = () => {
   // Device presets removed – full-viewport rendering
@@ -55,6 +54,77 @@ const Home5: React.FC = () => {
     window.addEventListener('orientationchange', onResize);
     return () => { window.removeEventListener('resize', onResize); window.removeEventListener('orientationchange', onResize); };
   }, []);
+
+  // Measure sidebar overflow (desktop only) to decide whether to collapse auth controls
+  useLayoutEffect(() => {
+    if (!isDesktop) { setSidebarOverflow(false); setAuthExpanded(false); return; }
+    const el = sidebarRef.current;
+    if (!el) return;
+    const measure = () => {
+      const overflow = el.scrollHeight > el.clientHeight + 1;
+      setSidebarOverflow(overflow);
+      if (!overflow) setAuthExpanded(false);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    window.addEventListener('orientationchange', measure);
+    return () => { window.removeEventListener('resize', measure); window.removeEventListener('orientationchange', measure); };
+  }, [isDesktop]);
+
+  // Desktop header zoom based on #main-board-wrapper (stabilized like Profile2)
+  useEffect(() => {
+    const applyZoomNow = () => {
+      try {
+        const wrapper = document.getElementById('main-board-wrapper') as HTMLDivElement | null;
+        if (!wrapper) return;
+        const headerEl = wrapper.querySelector('header') as HTMLElement | null;
+        if (!headerEl) return;
+        const clientH = wrapper.clientHeight;
+        const scrollH = wrapper.scrollHeight;
+        if (scrollH <= 0) return;
+        let z = (clientH - 64) / scrollH;
+        z = Math.max(0.1, Math.min(1, z));
+        z = Math.round(z * 1000) / 1000;
+        const prev = lastHeaderZoomRef.current;
+        if (prev !== null && Math.abs(prev - z) < 0.01) return;
+        lastHeaderZoomRef.current = z;
+        (headerEl.style as any).zoom = String(z);
+      } catch {}
+    };
+    const schedule = () => {
+      if (zoomHeaderRafRef.current != null) return;
+      try {
+        zoomHeaderRafRef.current = requestAnimationFrame(() => {
+          zoomHeaderRafRef.current = null;
+          applyZoomNow();
+        });
+      } catch { applyZoomNow(); }
+    };
+    if (!isDesktop) {
+      try {
+        const wrapper = document.getElementById('main-board-wrapper') as HTMLDivElement | null;
+        const headerEl = wrapper?.querySelector('header') as HTMLElement | null;
+        if (headerEl) (headerEl.style as any).zoom = '';
+      } catch {}
+      return;
+    }
+    schedule();
+    const onResize = () => schedule();
+    const onLoad = () => schedule();
+    const onBoardZoomed = () => schedule();
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+    window.addEventListener('load', onLoad);
+    window.addEventListener('home5:boardZoomed', onBoardZoomed as EventListener);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize);
+      window.removeEventListener('load', onLoad);
+      window.removeEventListener('home5:boardZoomed', onBoardZoomed as EventListener);
+      try { if (zoomHeaderRafRef.current != null) cancelAnimationFrame(zoomHeaderRafRef.current); } catch {}
+      zoomHeaderRafRef.current = null;
+    };
+  }, [isDesktop]);
 
   // Desktop header controls local UI state and event dispatchers
   const [uiPlayers, setUiPlayers] = useState<number>(() => {
@@ -120,7 +190,12 @@ const Home5: React.FC = () => {
   type Tile = { terrain: Terrain; number: number | null };
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
+  const sidebarRef = useRef<HTMLDivElement | null>(null);
+  const [sidebarOverflow, setSidebarOverflow] = useState<boolean>(false);
+  const [authExpanded, setAuthExpanded] = useState<boolean>(false);
   const [gamesVersion, setGamesVersion] = useState(0);
+  const lastHeaderZoomRef = useRef<number | null>(null);
+  const zoomHeaderRafRef = useRef<number | null>(null);
   type RollSource = 'virtual' | 'manual';
   interface DiceRollEntry { id: string; total: number; dice?: [number, number]; source: RollSource; ts: number }
   interface GameMeta { id: string; name: string; createdAt: number; updatedAt: number }
@@ -583,12 +658,14 @@ const Home5: React.FC = () => {
         const dvw = rect.width;
         const dvh = rect.height;
         const desired = Math.min(0.9 * dvw / containerWidth, 0.9 * dvh / containerHeight);
-        if (boardContainerRef.current) {
-            if (isDesktop) {
-                (boardContainerRef.current as HTMLDivElement).style.zoom = String(0.8 * desired);
-            } else {
-                (boardContainerRef.current as HTMLDivElement).style.zoom = String(desired);
-            }
+        const target = boardContainerRef.current as HTMLDivElement | null;
+        if (target) {
+          const scale = isDesktop ? (0.8 * desired) : desired;
+          const headerZoom = (lastHeaderZoomRef.current ?? 1);
+          const yTranslate = isDesktop ? (headerZoom < 0.8 ? '0%' : '5%') : '0%';
+          target.style.transform = `translate(-50%, ${yTranslate}) scale(${scale})`;
+          target.style.transformOrigin = 'top';
+          try { window.dispatchEvent(new CustomEvent('home5:boardZoomed')); } catch {}
         }
       };
 
@@ -610,8 +687,8 @@ const Home5: React.FC = () => {
         <div
           id="board-container"
           ref={boardContainerRef}
-          className={`absolute left-1/2 top-1/2 -translate-x-1/2 ${isDesktop ? '-translate-y-[57%]' : '-translate-y-1/2'}`}
-          style={{ width: containerWidth, height: containerHeight + 45, transformOrigin: 'center' }}>
+          className={`absolute left-1/2 top-0`}
+          style={{ width: containerWidth, height: containerHeight + 45, transformOrigin: 'top' }}>
             <div className="absolute z-[1] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" style={{ 
                 width: '105%',
                 height: '100%',
@@ -862,7 +939,7 @@ const Home5: React.FC = () => {
             <div className="absolute inset-0" aria-hidden />
             <div className="relative w-full h-full flex">
               {/* Sidebar */}
-              <aside className="sticky top-0 h-screen overflow-y-auto shrink-0 w-[240px] px-4 py-6 flex flex-col justify-between z-[10]">
+              <aside ref={sidebarRef} className="sticky top-0 h-screen overflow-y-auto shrink-0 w-[240px] px-4 py-6 flex flex-col justify-between z-[10] relative">
                 <div>
                   <div className="flex items-center gap-3 mb-8">
                     <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center">
@@ -904,26 +981,67 @@ const Home5: React.FC = () => {
                           <p className="font-semibold truncate max-w-[18ch]">{user?.name || ''}</p>
                           <p className="text-xs text-white/70 truncate max-w-[22ch]">{user?.email || ''}</p>
                         </div>
+                        {sidebarOverflow && (
+                          <button aria-label="Toggle controls" onClick={() => setAuthExpanded(v=>!v)} className="ml-auto p-2 rounded-md hover:bg-white/10">
+                            <svg className={`w-4 h-4 text-white transition-transform ${authExpanded ? '' : '-rotate-90'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+                          </button>
+                        )}
                       </div>
-                      <div className="mt-3 grid grid-cols-2 gap-2">
-                        <button onClick={handleBackup} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Backup</button>
-                        <button onClick={handleRestore} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Restore</button>
-                        <button onClick={handleExportFile} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs col-span-1">Export</button>
-                        <label className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs flex items-center justify-center cursor-pointer col-span-1">
-                          Import
-                          <input type="file" accept="application/json" onChange={handleImportFile} className="hidden" />
-                        </label>
-                      </div>
-                      <div className="mt-3 flex items-center justify-between text-xs text-white/80">
-                        <div className="flex flex-col"><span>Last backup:</span><span>{lastBackupAt ? formatBackup(lastBackupAt) : '—'}</span></div>
-                        <label className="inline-flex items-center gap-1 cursor-pointer">
-                          <input type="checkbox" checked={autoBackupEnabled} onChange={e=>setAutoBackupEnabled(e.target.checked)} />
-                          Auto backup
-                        </label>
-                      </div>
-                      <div className="mt-3">
-                        <button onClick={signOut} className="w-full h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Sign out</button>
-                      </div>
+                      {!sidebarOverflow && (
+                        <>
+                          <div className="mt-3 grid grid-cols-2 gap-2">
+                            <button onClick={handleBackup} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Backup</button>
+                            <button onClick={handleRestore} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Restore</button>
+                            <button onClick={handleExportFile} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs col-span-1">Export</button>
+                            <label className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs flex items-center justify-center cursor-pointer col-span-1">
+                              Import
+                              <input type="file" accept="application/json" onChange={handleImportFile} className="hidden" />
+                            </label>
+                          </div>
+                          <div className="mt-3 flex items-center justify-between text-xs text-white/80">
+                            <div className="flex flex-col"><span>Last backup:</span><span>{lastBackupAt ? formatBackup(lastBackupAt) : '—'}</span></div>
+                            <label className="inline-flex items-center gap-1 cursor-pointer">
+                              <input type="checkbox" checked={autoBackupEnabled} onChange={e=>setAutoBackupEnabled(e.target.checked)} />
+                              Auto backup
+                            </label>
+                          </div>
+                          <div className="mt-3">
+                            <button onClick={signOut} className="w-full h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Sign out</button>
+                          </div>
+                        </>
+                      )}
+                      {sidebarOverflow && authExpanded && (
+                        <>
+                          <div className="fixed inset-0 z-[90]" onClick={() => setAuthExpanded(false)} aria-hidden />
+                          <div className="absolute left-2 right-2 bottom-4 z-[100] rounded-xl border border-white/10 bg-[#120A28]/95 backdrop-blur p-3 shadow-2xl">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="text-xs text-white/70">User actions</div>
+                              <button aria-label="Close" onClick={() => setAuthExpanded(false)} className="p-1 rounded-md hover:bg-white/10">
+                                <svg className="w-4 h-4 text-white/90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <button onClick={handleBackup} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Backup</button>
+                              <button onClick={handleRestore} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Restore</button>
+                              <button onClick={handleExportFile} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Export</button>
+                              <label className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs flex items-center justify-center cursor-pointer">
+                                Import
+                                <input type="file" accept="application/json" onChange={handleImportFile} className="hidden" />
+                              </label>
+                            </div>
+                            <div className="mt-3 flex items-center justify-between text-xs text-white/80">
+                              <div className="flex flex-col"><span>Last backup:</span><span>{lastBackupAt ? formatBackup(lastBackupAt) : '—'}</span></div>
+                              <label className="inline-flex items-center gap-1 cursor-pointer">
+                                <input type="checkbox" checked={autoBackupEnabled} onChange={e=>setAutoBackupEnabled(e.target.checked)} />
+                                Auto backup
+                              </label>
+                            </div>
+                            <div className="mt-3">
+                              <button onClick={signOut} className="w-full h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Sign out</button>
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   ) : (
                     <GoogleSignInButton onClick={signIn} variant="full" className="w-full" aria-label="Sign in with Google" />
@@ -936,7 +1054,7 @@ const Home5: React.FC = () => {
                 <div className="absolute -left-[200px] -bottom-[0px] h-[600px] w-[600px] rounded-full blur-[100px] will-change-[filter] [transform:translateZ(0)] pointer-events-none"
                   style={{ background: (!isDesktop ? 'radial-gradient(circle, rgb(134 0 255 / 1) 0%, transparent 70%)' : 'transparent') }} />
 
-                <div className="w-full h-full rounded-[16px] overflow-hidden">
+                <div className="w-full h-full rounded-[16px] overflow-hidden" id="main-board-wrapper" >
                     <div className="z-[-1]" style={{ position: 'absolute', inset: 0 }}>
                 <Suspense fallback={null}>
                 <Iridescence color={[100, 200, 255]} className='absolute inset-0' />

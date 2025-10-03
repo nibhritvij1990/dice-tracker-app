@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, Suspense, lazy } from 'react';
+import React, { useEffect, useMemo, useRef, useState, Suspense, lazy, useLayoutEffect } from 'react';
 import '../index2.css';
 import { Link } from 'react-router-dom';
 const LiquidGlassCard = lazy(() => import('../components/LiquidGlassCard'));
@@ -30,6 +30,9 @@ const Tracker2: React.FC = () => {
   // Auth
   const { isAuthenticated, user, signIn, signOut, getAccessToken } = useAuth();
   const { lastBackupAt, autoBackupEnabled, setAutoBackupEnabled } = useSync();
+  const sidebarRef = useRef<HTMLDivElement | null>(null);
+  const [sidebarOverflow, setSidebarOverflow] = useState<boolean>(false);
+  const [authExpanded, setAuthExpanded] = useState<boolean>(false);
 
   function formatBackup(ts: number) {
     try {
@@ -57,6 +60,22 @@ const Tracker2: React.FC = () => {
     window.addEventListener('orientationchange', onResize);
     return () => { window.removeEventListener('resize', onResize); window.removeEventListener('orientationchange', onResize); };
   }, []);
+
+  // Measure sidebar overflow (desktop only) to decide whether to collapse auth controls
+  useLayoutEffect(() => {
+    if (!isDesktop) { setSidebarOverflow(false); setAuthExpanded(false); return; }
+    const el = sidebarRef.current;
+    if (!el) return;
+    const measure = () => {
+      const overflow = el.scrollHeight > el.clientHeight + 1;
+      setSidebarOverflow(overflow);
+      if (!overflow) setAuthExpanded(false);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    window.addEventListener('orientationchange', measure);
+    return () => { window.removeEventListener('resize', measure); window.removeEventListener('orientationchange', measure); };
+  }, [isDesktop]);
 
   async function handleBackup() {
     try {
@@ -362,7 +381,7 @@ const Tracker2: React.FC = () => {
       <div className="app-safe overflow-hidden bg-gradient-to-br from-[#2E1371] to-[#130B2B] text-white relative" style={{ minHeight: '100dvh' }}>
         <div className="relative w-full h-full flex">
           {/* Sidebar */}
-          <aside className="sticky top-0 h-screen overflow-y-auto shrink-0 w-[240px] px-4 py-6 flex flex-col justify-between z-[10]">
+          <aside ref={sidebarRef} className="sticky top-0 h-screen overflow-y-auto shrink-0 w-[240px] px-4 py-6 flex flex-col justify-between z-[10] relative">
             <div>
               {/* Brand */}
               <div className="flex items-center gap-3 mb-6">
@@ -406,26 +425,69 @@ const Tracker2: React.FC = () => {
                       <p className="font-semibold truncate max-w-[18ch]">{user?.name || ''}</p>
                       <p className="text-xs text-white/70 truncate max-w-[22ch]">{user?.email || ''}</p>
                     </div>
+                    {sidebarOverflow && (
+                      <button aria-label="Toggle controls" onClick={() => setAuthExpanded(v=>!v)} className="ml-auto p-2 rounded-md hover:bg-white/10">
+                        <svg className={`w-4 h-4 text-white transition-transform ${authExpanded ? '' : '-rotate-90'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+                      </button>
+                    )}
                   </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <button onClick={handleBackup} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Backup</button>
-                    <button onClick={handleRestore} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Restore</button>
-                    <button onClick={handleExportFile} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs col-span-1">Export</button>
-                    <label className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs flex items-center justify-center cursor-pointer col-span-1">
-                      Import
-                      <input type="file" accept="application/json" onChange={handleImportFile} className="hidden" />
-                    </label>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between text-xs text-white/80">
-                  <div className="flex flex-col"><span>Last backup:</span><span>{lastBackupAt ? formatBackup(lastBackupAt) : '—'}</span></div>
-                    <label className="inline-flex items-center gap-1 cursor-pointer">
-                      <input type="checkbox" checked={autoBackupEnabled} onChange={e=>setAutoBackupEnabled(e.target.checked)} />
-                      Auto backup
-                    </label>
-                  </div>
-                  <div className="mt-3">
-                    <button onClick={signOut} className="w-full h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Sign out</button>
-                  </div>
+                  {/* Inline controls when no overflow */}
+                  {!sidebarOverflow && (
+                    <>
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <button onClick={handleBackup} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Backup</button>
+                        <button onClick={handleRestore} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Restore</button>
+                        <button onClick={handleExportFile} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs col-span-1">Export</button>
+                        <label className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs flex items-center justify-center cursor-pointer col-span-1">
+                          Import
+                          <input type="file" accept="application/json" onChange={handleImportFile} className="hidden" />
+                        </label>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between text-xs text-white/80">
+                        <div className="flex flex-col"><span>Last backup:</span><span>{lastBackupAt ? formatBackup(lastBackupAt) : '—'}</span></div>
+                        <label className="inline-flex items-center gap-1 cursor-pointer">
+                          <input type="checkbox" checked={autoBackupEnabled} onChange={e=>setAutoBackupEnabled(e.target.checked)} />
+                          Auto backup
+                        </label>
+                      </div>
+                      <div className="mt-3">
+                        <button onClick={signOut} className="w-full h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Sign out</button>
+                      </div>
+                    </>
+                  )}
+                  {/* Popup submenu when overflow and expanded */}
+                  {sidebarOverflow && authExpanded && (
+                    <>
+                      <div className="fixed inset-0 z-[90]" onClick={() => setAuthExpanded(false)} aria-hidden />
+                      <div className="absolute left-2 right-2 bottom-4 z-[100] rounded-xl border border-white/10 bg-[#120A28]/95 backdrop-blur p-3 shadow-2xl">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="text-xs text-white/70">User actions</div>
+                          <button aria-label="Close" onClick={() => setAuthExpanded(false)} className="p-1 rounded-md hover:bg-white/10">
+                            <svg className="w-4 h-4 text-white/90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button onClick={handleBackup} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Backup</button>
+                          <button onClick={handleRestore} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Restore</button>
+                          <button onClick={handleExportFile} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Export</button>
+                          <label className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs flex items-center justify-center cursor-pointer">
+                            Import
+                            <input type="file" accept="application/json" onChange={handleImportFile} className="hidden" />
+                          </label>
+                        </div>
+                        <div className="mt-3 flex items-center justify-between text-xs text-white/80">
+                          <div className="flex flex-col"><span>Last backup:</span><span>{lastBackupAt ? formatBackup(lastBackupAt) : '—'}</span></div>
+                          <label className="inline-flex items-center gap-1 cursor-pointer">
+                            <input type="checkbox" checked={autoBackupEnabled} onChange={e=>setAutoBackupEnabled(e.target.checked)} />
+                            Auto backup
+                          </label>
+                        </div>
+                        <div className="mt-3">
+                          <button onClick={signOut} className="w-full h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Sign out</button>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               ) : (
                 <GoogleSignInButton onClick={signIn} variant="full" className="w-full" aria-label="Sign in with Google" />
@@ -460,7 +522,7 @@ const Tracker2: React.FC = () => {
                         <div className="mt-4 relative flex-1">
                           {/* Centered dice overlay */}
                           <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="flex items-center gap-10">
+                            <div className="flex items-center gap-[10%] -translate-x-1/4">
                               {([0,1] as const).map((i) => {
                               const v = i===0 ? dieA : dieB;
                               const colorClass = i===0 ? 'die-red' : 'die-yellow';
@@ -546,10 +608,9 @@ const Tracker2: React.FC = () => {
                           {/* Keep Roll button accessible within the section */}
                           <div className="absolute top-1/2 -translate-y-1/2 right-4">
                             <button 
-                              style={{ boxShadow: '-1px -1px 0px 0px rgb(7, 251, 211), 0px -1px 0px 0px rgb(7, 251, 211)' }}
                               onClick={rollVirtual}
                               disabled={isRolling}
-                              className="h-11 px-5 rounded-xl border border-black/10 bg-[#2E1371] hover:bg-[#130B2B] disabled:opacity-60 text-sm text-white"
+                              className="h-11 px-5 rounded-xl bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-sm text-white"
                             >
                               {isRolling ? '...' : 'Roll'}
                             </button>
@@ -566,8 +627,8 @@ const Tracker2: React.FC = () => {
                                 key={n}
                                 onClick={() => addRoll(n, 'manual')}
                                 className="rounded-xl border text-md font-semibold transition-all
-                                  bg-gradient-to-b from-white to-gray-100 text-gray-900 border-gray-200
-                                  hover:from-white hover:to-white hover:shadow-md hover:translate-y-[-1px]
+                                  bg-gradient-to-b from-[#2e1371cc] to-[#2e1371ff] text-gray-100 border-gray-200
+                                  hover:from-[#130B2Bcc] hover:to-[#130B2Bff] hover:shadow-md hover:translate-y-[-1px]
                                   active:translate-y-[0px] active:shadow-sm"
                                 style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.6), 0 1px 2px rgba(0,0,0,0.06)', aspectRatio: '1 / 0.75' }}
                               >
