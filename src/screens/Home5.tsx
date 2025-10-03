@@ -23,7 +23,6 @@ import { useSync } from '../drive/SyncProvider';
 import { createOrUpdateAppDataJson, readAppDataJson, exportAllLocalStorage, importAllToLocalStorage } from '../drive/driveClient';
 import { exportLocalToFile, importLocalFromFile } from '../drive/localExport';
 
-
 const Home5: React.FC = () => {
   // Device presets removed – full-viewport rendering
   const { isAuthenticated, user, signIn, signOut, getAccessToken } = useAuth();
