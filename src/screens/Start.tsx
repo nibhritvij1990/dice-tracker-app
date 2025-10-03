@@ -12,6 +12,11 @@ const Start: React.FC = () => {
   const targetRef = useRef<HTMLDivElement | null>(null);
   const [impactAnchor, setImpactAnchor] = useState<{ x: number; y: number } | null>(null);
   const { isAuthenticated, signIn } = useAuth();
+  const [isWide, setIsWide] = useState<boolean>(() => {
+    try {
+      return (window.innerWidth > window.innerHeight) || window.matchMedia('(min-width: 100vh)').matches;
+    } catch { return false }
+  });
 
   useLayoutEffect(() => {
     const wrapper = wrapperRef.current;
@@ -24,8 +29,15 @@ const Start: React.FC = () => {
       raf = requestAnimationFrame(() => {
       const wr = wrapper.getBoundingClientRect();
       const tr = target.getBoundingClientRect();
-      const x = Math.round(2*(tr.left + tr.width / 2 - wr.left));
-      const y = Math.round(2*(tr.top - wr.top)); // top edge of target box
+      const dpr = window.devicePixelRatio || 1;
+      const xCss = tr.left + tr.width / 2 - wr.left;
+      const yCss = tr.top - wr.top; // top edge of target box
+      let x = Math.round(xCss * dpr);
+      let y = Math.round(yCss * dpr);
+      const maxX = Math.round(wr.width * dpr);
+      const maxY = Math.round(wr.height * dpr);
+      if (x < 0) x = 0; else if (x > maxX) x = maxX;
+      if (y < 0) y = 0; else if (y > maxY) y = maxY;
       setImpactAnchor({ x, y });
       });
     };
@@ -44,10 +56,28 @@ const Start: React.FC = () => {
     };
   }, []);
 
+  useLayoutEffect(() => {
+    const mql = typeof window !== 'undefined' ? window.matchMedia('(min-width: 100vh)') : null;
+    const onResize = () => {
+      try {
+        setIsWide((window.innerWidth > window.innerHeight) || (mql ? mql.matches : false));
+      } catch {}
+    };
+    onResize();
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+    mql?.addEventListener?.('change', onResize as EventListener);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize);
+      mql?.removeEventListener?.('change', onResize as EventListener);
+    };
+  }, []);
+
   return (
-    <div className="app-safe relative bg-gradient-to-br from-[#2E1371] to-[#130B2B]">
+    <div className="app-safe relative">
         {/* Fixed background to cover viewport during scroll to avoid white gaps */}
-        <div className="fixed inset-0 -z-10 bg-gradient-to-br from-[#2E1371] to-[#130B2B]" />
+        <div className="fixed inset-0 -z-10 bg-gradient-to-br from-[#2E1371] to-[#130B2B]" id="start" />
         <div className="absolute inset-0" ref={wrapperRef}>
           {/* Laser background */}
           <div className="absolute inset-0">
@@ -58,7 +88,7 @@ const Start: React.FC = () => {
               horizontalBeamOffset={0.0}
               verticalBeamOffset={0.0}
               verticalSizing={16}
-              horizontalSizing={2.5}
+              horizontalSizing={isWide ? 1 : 2.5}
               flowSpeed={0.5}
               flowStrength={1}
               decay={2}
@@ -71,7 +101,7 @@ const Start: React.FC = () => {
               wispDensity={4}
               mouseTiltStrength={0.01}
               mouseSmoothTime={0.0}
-              baseFlatten={0.1}
+              baseFlatten={1}
               impactAnchorPx={impactAnchor}
               coreThicknessPx={100}
               coreHeightPx={window.innerHeight}

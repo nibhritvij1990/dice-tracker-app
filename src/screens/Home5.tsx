@@ -1,0 +1,984 @@
+import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
+import '../index2.css';
+import { Link, useNavigate } from 'react-router-dom';
+import LiquidGlassCard from '../components/LiquidGlassCard';
+import desertPng from '../assets/images/desert.png';
+import brickPng from '../assets/images/brick.png';
+import grainPng from '../assets/images/grain.png';
+import lumberPng from '../assets/images/lumber.png';
+import orePng from '../assets/images/ore.png';
+import sheepPng from '../assets/images/sheep.png';
+// Prefer modern formats if available
+import desertWebp from '../assets/images/desert.webp';
+import brickWebp from '../assets/images/brick.webp';
+import grainWebp from '../assets/images/grain.webp';
+import lumberWebp from '../assets/images/lumber.webp';
+import oreWebp from '../assets/images/ore.webp';
+import sheepWebp from '../assets/images/sheep.webp';
+//import waterPng from '../assets/images/gemini_water.png';
+const Iridescence = lazy(() => import('../components/Iridescence.tsx'));
+import GoogleSignInButton from '../components/GoogleSignInButton';
+import { useAuth } from '../auth/AuthProvider';
+import { useSync } from '../drive/SyncProvider';
+import { createOrUpdateAppDataJson, readAppDataJson, exportAllLocalStorage, importAllToLocalStorage } from '../drive/driveClient';
+import { exportLocalToFile, importLocalFromFile } from '../drive/localExport';
+
+
+const Home5: React.FC = () => {
+  // Device presets removed – full-viewport rendering
+  const { isAuthenticated, user, signIn, signOut, getAccessToken } = useAuth();
+  const { lastBackupAt, autoBackupEnabled, setAutoBackupEnabled } = useSync();
+
+  function formatBackup(ts: number) {
+    try {
+      const d = new Date(ts);
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const yy = String(d.getFullYear()).slice(-2);
+      let h = d.getHours();
+      const m = String(d.getMinutes()).padStart(2, '0');
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      h = h % 12; if (h === 0) h = 12;
+      const hh = String(h).padStart(2, '0');
+      return `${dd}/${mm}/${yy} ${hh}:${m} ${ampm}`;
+    } catch { return '—'; }
+  }
+
+  // Responsive mode: desktop when width > height (min-width >= 100vh)
+  const [isDesktop, setIsDesktop] = useState<boolean>(() => {
+    try { return window.innerWidth > window.innerHeight } catch { return false }
+  });
+  useEffect(() => {
+    const onResize = () => { try { setIsDesktop(window.innerWidth > window.innerHeight) } catch {} };
+    onResize();
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+    return () => { window.removeEventListener('resize', onResize); window.removeEventListener('orientationchange', onResize); };
+  }, []);
+
+  // Desktop header controls local UI state and event dispatchers
+  const [uiPlayers, setUiPlayers] = useState<number>(() => {
+    try { const v = localStorage.getItem('catan_players'); return v ? Number(v) : 4; } catch { return 4; }
+  });
+  function onHeaderSelectPlayers(n: number) {
+    setUiPlayers(n);
+    try { localStorage.setItem('catan_players', String(n)); } catch {}
+    try { window.dispatchEvent(new CustomEvent('home5:setPlayers', { detail: n })); } catch {}
+  }
+  function onHeaderGenerate() {
+    try { window.dispatchEvent(new CustomEvent('home5:generate')); } catch {}
+  }
+
+  async function handleBackup() {
+    try {
+      const token = await getAccessToken();
+      if (!token) return;
+      const snapshot = exportAllLocalStorage();
+      await createOrUpdateAppDataJson(token, 'app_data.json', { snapshot, ts: Date.now() });
+      alert('Backup complete to Drive AppData.');
+    } catch (e) {
+      alert('Backup failed. Check Drive permission and try again.');
+    }
+  }
+
+  async function handleRestore() {
+    try {
+      const token = await getAccessToken();
+      if (!token) return;
+      const data = await readAppDataJson<{ snapshot: Record<string,string> }>(token, 'app_data.json');
+      if (data?.snapshot) {
+        importAllToLocalStorage(data.snapshot);
+        alert('Restore complete. Restarting screen…');
+        window.location.reload();
+      } else {
+        alert('No backup found.');
+      }
+    } catch (e) {
+      alert('Restore failed. Check Drive permission and try again.');
+    }
+  }
+
+  function handleExportFile() {
+    exportLocalToFile()
+  }
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]
+    if (!f) return
+    try {
+      await importLocalFromFile(f)
+      alert('Imported backup. Restarting screen…')
+      window.location.reload()
+    } catch {
+      alert('Import failed: invalid file')
+    } finally {
+      e.currentTarget.value = ''
+    }
+  }
+
+  type Terrain = 'forest' | 'pasture' | 'fields' | 'hills' | 'mountains' | 'desert';
+  type Tile = { terrain: Terrain; number: number | null };
+  const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [gamesVersion, setGamesVersion] = useState(0);
+  type RollSource = 'virtual' | 'manual';
+  interface DiceRollEntry { id: string; total: number; dice?: [number, number]; source: RollSource; ts: number }
+  interface GameMeta { id: string; name: string; createdAt: number; updatedAt: number }
+  interface GameData { rolls: DiceRollEntry[] }
+  const storage = {
+    getGames(): GameMeta[] { try { return JSON.parse(localStorage.getItem('dice_tracker_games') || '[]') as GameMeta[]; } catch { return []; } },
+    saveGames(list: GameMeta[]) { localStorage.setItem('dice_tracker_games', JSON.stringify(list)); },
+    getCurrentId(): string | null { return localStorage.getItem('dice_tracker_current_game_id'); },
+    setCurrentId(id: string) { localStorage.setItem('dice_tracker_current_game_id', id); },
+    dataKey(id: string) { return `dice_tracker_game_${id}`; },
+    getData(id: string): GameData { try { return JSON.parse(localStorage.getItem(this.dataKey(id)) || '{"rolls":[]}') as GameData; } catch { return { rolls: [] }; } },
+    saveData(id: string, data: GameData) { localStorage.setItem(this.dataKey(id), JSON.stringify(data)); },
+    createGame(name: string): GameMeta {
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const now = Date.now();
+      const meta: GameMeta = { id, name, createdAt: now, updatedAt: now };
+      const list = this.getGames();
+      list.unshift(meta);
+      this.saveGames(list.slice(0, 50));
+      this.saveData(id, { rolls: [] });
+      this.setCurrentId(id);
+      return meta;
+    },
+    touchGame(id: string) { const list = this.getGames(); const i = list.findIndex(g=>g.id===id); if (i>=0){ list[i].updatedAt = Date.now(); this.saveGames(list);} },
+    renameGame(id: string, name: string) { const list = this.getGames(); const i = list.findIndex(g=>g.id===id); if (i>=0){ list[i].name = name; this.saveGames(list);} },
+    deleteGame(id: string) {
+      const list = this.getGames();
+      const nextList = list.filter(g => g.id !== id);
+      this.saveGames(nextList);
+      localStorage.removeItem(this.dataKey(id));
+      const current = this.getCurrentId();
+      if (current === id) {
+        const fallback = nextList.sort((a,b)=>b.updatedAt-a.updatedAt)[0];
+        if (fallback) { this.setCurrentId(fallback.id); } else { const nm = new Date().toLocaleString(); const meta = this.createGame(nm); this.setCurrentId(meta.id); }
+      }
+    }
+  };
+  const [gameName, setGameName] = useState<string>('');
+  useEffect(() => {
+    let id = storage.getCurrentId();
+    if (!id) { const name = new Date().toLocaleString(); const meta = storage.createGame(name); id = meta.id; }
+    const meta = storage.getGames().find(g=>g.id===id);
+    setGameName(meta?.name || new Date().toLocaleString());
+  }, []);
+  const recentGames = useMemo(() => {
+    try { return storage.getGames().sort((a,b)=>b.updatedAt-a.updatedAt).slice(0,10); } catch { return [] as GameMeta[]; }
+  }, [gamesVersion]);
+  const startNewGame = () => {
+    const meta = storage.createGame(new Date().toLocaleString());
+    setGameName(meta.name); setGamesVersion(v=>v+1);
+    navigate('/tracker');
+  };
+  const loadGame = (id: string) => {
+    storage.setCurrentId(id); setGamesVersion(v=>v+1); navigate('/tracker');
+  };
+  const rows4 = [3,4,5,4,3];
+  const numberOrder4 = [5,2,6,3,8,10,9,12,11,4,8,10,9,4,5,6,3,11];
+  // 5-player specs
+  const columns5 = [4,5,6,5,4]; // heights per column (flat-top columns)
+  const numberOrder5 = [2,5,4,6,3,9,8,11,11,10,6,3,8,4,8,10,11,12,10,5,4,9,5];
+  const spiral5: Array<[number, number]> = [
+    [0,3],[0,2],[0,1],[0,0],[1,0],[2,0],[3,0],[4,0],[4,1],[4,2],[4,3],[3,4],[2,5],[1,4],[1,3],[1,2],[1,1],[2,1],[3,1],[3,2],[3,3],[2,4],[2,3],[2,2]
+  ];
+
+  // 6-player specs
+  const columns6 = [3,4,5,6,5,4,3];
+  const numberOrder6 = [2,5,4,6,3,9,8,11,11,10,6,3,8,4,8,10,11,12,10,5,4,9,5,9,12,3,2,6];
+  const spiral6: Array<[number, number]> = [
+    // outer 16
+    [0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0],[6,1],[6,2],[5,3],[4,4],[3,5],[2,4],[1,3],[0,2],[0,1],
+    // inner 10
+    [1,1],[2,1],[3,1],[4,1],[5,1],[5,2],[4,3],[3,4],[2,3],[1,2],
+    // center 4 (corrected)
+    [2,2],[3,2],[4,2],[3,3]
+  ];
+
+  function mulberry32(a: number) { return function() { let t = a += 0x6D2B79F5; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+  function shuffle<T>(arr: T[], rand: () => number) { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; }
+
+  function generateBoard4(seed: number): Tile[][] {
+    const rand = mulberry32(seed);
+    const bag: Terrain[] = [
+      ...Array(4).fill('forest'),
+      ...Array(4).fill('pasture'),
+      ...Array(4).fill('fields'),
+      ...Array(3).fill('hills'),
+      ...Array(3).fill('mountains'),
+      'desert',
+    ];
+    shuffle(bag, rand);
+
+    const tiles: Tile[][] = [];
+    let idx = 0;
+    for (const n of rows4) {
+      const row: Tile[] = [];
+      for (let i = 0; i < n; i++) row.push({ terrain: bag[idx++], number: null });
+      tiles.push(row);
+    }
+
+    // Assign numbers using absolute [col,row] spiral with flat-top columns
+    const outer: Array<[number, number]> = [
+      [0,0],[1,0],[2,0],[3,0],[4,0],[4,1],[4,2],[3,3],[2,4],[1,3],[0,2],[0,1]
+    ];
+    const inner: Array<[number, number]> = [
+      [1,1],[2,1],[3,1],[3,2],[2,3],[1,2]
+    ];
+    const center: Array<[number, number]> = [[2,2]];
+    const spiralAbs = [...outer, ...inner, ...center];
+
+    // Build columns mapping (top-to-bottom) to mirror render order
+    const columns: Array<Array<{ r: number; c: number }>> = Array.from({ length: 5 }, () => []);
+    const startIndexByRowMap = [0,1,0,0,2];
+    for (let r = 0; r < tiles.length; r++) {
+      const row = tiles[r];
+      const start = startIndexByRowMap[r] ?? 0;
+      for (let c = 0; c < row.length; c++) {
+        const x = start + c;
+        columns[x].push({ r, c });
+      }
+    }
+
+    let ni = 0;
+    for (const [x, y] of spiralAbs) {
+      const pos = columns[x]?.[y];
+      if (!pos) continue;
+      const tile = tiles[pos.r][pos.c];
+      if (tile.terrain !== 'desert') {
+        tile.number = numberOrder4[ni++];
+        if (ni >= numberOrder4.length) break;
+      }
+    }
+    return tiles;
+  }
+
+  function generateBoard5(seed: number): Tile[][] {
+    const rand = mulberry32(seed);
+    // Resource counts: 4 brick (hills), 5 wheat (fields), 5 sheep (pasture), 5 wood (forest), 4 ore (mountains), 1 desert
+    const bag: Terrain[] = [
+      ...Array(5).fill('forest'),
+      ...Array(5).fill('pasture'),
+      ...Array(5).fill('fields'),
+      ...Array(4).fill('hills'),
+      ...Array(4).fill('mountains'),
+      'desert',
+    ];
+    shuffle(bag, rand);
+    // Build columns structure [4,5,6,5,4]
+    const cols: Tile[][] = columns5.map(h => Array.from({ length: h }, () => ({ terrain: 'desert' as Terrain, number: null })));
+    let bi = 0;
+    for (let x = 0; x < cols.length; x++) {
+      for (let y = 0; y < cols[x].length; y++) {
+        cols[x][y] = { terrain: bag[bi++], number: null };
+      }
+    }
+    // Assign numbers along provided spiral coords
+    let ni = 0;
+    for (const [x, y] of spiral5) {
+      const t = cols[x]?.[y];
+      if (!t) continue;
+      if (t.terrain !== 'desert') {
+        t.number = numberOrder5[ni++];
+        if (ni >= numberOrder5.length) break;
+      }
+    }
+    return cols;
+  }
+
+  function generateBoard6(seed: number): Tile[][] {
+    const rand = mulberry32(seed);
+    const bag: Terrain[] = [
+      ...Array(6).fill('forest'),
+      ...Array(6).fill('pasture'),
+      ...Array(6).fill('fields'),
+      ...Array(5).fill('hills'),
+      ...Array(5).fill('mountains'),
+      ...Array(2).fill('desert'),
+    ];
+    shuffle(bag, rand);
+    const cols: Tile[][] = columns6.map(h => Array.from({ length: h }, () => ({ terrain: 'desert' as Terrain, number: null })));
+    let bi = 0;
+    for (let x = 0; x < cols.length; x++) {
+      for (let y = 0; y < cols[x].length; y++) {
+        cols[x][y] = { terrain: bag[bi++], number: null };
+      }
+    }
+    let ni = 0;
+    for (const [x, y] of spiral6) {
+      const t = cols[x]?.[y];
+      if (!t) continue;
+      if (t.terrain !== 'desert') {
+        t.number = numberOrder6[ni++];
+        if (ni >= numberOrder6.length) break;
+      }
+    }
+    return cols;
+  }
+
+  function assignNumbersToExistingBoard4(existing: Tile[][]): Tile[][] {
+    // Deep clone numbers only
+    const tiles: Tile[][] = existing.map(row => row.map(t => ({ terrain: t.terrain, number: null as number | null })));
+    const startIndexByRowMap = [0,1,0,0,2];
+    const outer: Array<[number, number]> = [
+      [0,0],[1,0],[2,0],[3,0],[4,0],[4,1],[4,2],[3,3],[2,4],[1,3],[0,2],[0,1]
+    ];
+    const inner: Array<[number, number]> = [
+      [1,1],[2,1],[3,1],[3,2],[2,3],[1,2]
+    ];
+    const center: Array<[number, number]> = [[2,2]];
+    const spiralAbs = [...outer, ...inner, ...center];
+
+    const columns: Array<Array<{ r: number; c: number }>> = Array.from({ length: 5 }, () => []);
+    for (let r = 0; r < tiles.length; r++) {
+      const row = tiles[r];
+      const start = startIndexByRowMap[r] ?? 0;
+      for (let c = 0; c < row.length; c++) {
+        const x = start + c;
+        columns[x].push({ r, c });
+      }
+    }
+
+    let ni = 0;
+    for (const [x, y] of spiralAbs) {
+      const pos = columns[x]?.[y];
+      if (!pos) continue;
+      const tile = tiles[pos.r][pos.c];
+      if (tile.terrain !== 'desert') {
+        tile.number = numberOrder4[ni++];
+        if (ni >= numberOrder4.length) break;
+      }
+    }
+    return tiles;
+  }
+
+  function CatanSetup({ desktop }: { desktop: boolean }) {
+    const [players, setPlayers] = useState<number>(() => {
+      try { const v = localStorage.getItem('catan_players'); return v ? Number(v) : 4; } catch { return 4; }
+    });
+    // no separate seed state required
+    const keyFor = (p: number) => `catan_map_${p}p`;
+    const [board, setBoard] = useState<Tile[][] | null>(() => {
+      try {
+        const raw = localStorage.getItem(keyFor(players));
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as { seed: number; board: Tile[][] };
+        if (parsed && parsed.board && Array.isArray(parsed.board)) {
+          const fixed = (players===4 ? assignNumbersToExistingBoard4(parsed.board) : parsed.board);
+          // Persist normalized once into the per-player key
+          localStorage.setItem(keyFor(players), JSON.stringify({ seed: parsed.seed, board: fixed }));
+          return fixed;
+        }
+        return null;
+      } catch { return null; }
+    });
+
+    // When player count changes, load that board if present; else empty
+    useEffect(() => {
+      try {
+        const raw = localStorage.getItem(keyFor(players));
+        if (!raw) { setBoard(null); return; }
+        const parsed = JSON.parse(raw) as { seed: number; board: Tile[][] };
+        if (parsed && parsed.board && Array.isArray(parsed.board)) {
+          const fixed = (players===4 ? assignNumbersToExistingBoard4(parsed.board) : parsed.board);
+          setBoard(fixed);
+          // optional normalize write-back
+          localStorage.setItem(keyFor(players), JSON.stringify({ seed: parsed.seed, board: fixed }));
+        } else {
+          setBoard(null);
+        }
+      } catch {
+        setBoard(null);
+      }
+    }, [players]);
+
+    const onGenerate = () => {
+      const newSeed = Date.now();
+      const b = (players===6 ? generateBoard6(newSeed) : players===5 ? generateBoard5(newSeed) : generateBoard4(newSeed));
+      setBoard(b);
+      localStorage.setItem(keyFor(players), JSON.stringify({ seed: newSeed, board: b }));
+    };
+
+    // Listen to top-level controls in desktop header
+    useEffect(() => {
+      const handleSetPlayers = (ev: Event) => {
+        try {
+          const n = (ev as CustomEvent<number>).detail;
+          if (typeof n === 'number') setPlayers(n);
+        } catch {}
+      };
+      const handleGenerate = () => { onGenerate(); };
+      window.addEventListener('home5:setPlayers', handleSetPlayers as EventListener);
+      window.addEventListener('home5:generate', handleGenerate as EventListener);
+      return () => {
+        window.removeEventListener('home5:setPlayers', handleSetPlayers as EventListener);
+        window.removeEventListener('home5:generate', handleGenerate as EventListener);
+      };
+    }, []);
+
+    if (desktop) {
+      return (
+        <div className="flex items-start gap-6 w-full h-full">
+          {/* Left: Board area fills remaining space */}
+          <div className='relative flex-1 h-full' id='desktop-board-container'>
+            <div className="absolute inset-0 overflow-hidden">   
+              <div className="absolute inset-0">
+                <CatanBoard board={board} players={players} />
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Mobile/portrait content
+    const safeTop = Number(getComputedStyle(document.documentElement).getPropertyValue('--safe-top').replace('px', '')) || 0;
+    const safeBottom = Number(getComputedStyle(document.documentElement).getPropertyValue('--safe-bottom').replace('px', '')) || 0;
+    const bodyvw = document.body.clientWidth;
+    const bodyvh = document.body.clientHeight - 320 - safeBottom - safeTop;
+
+    return (
+      <div className="absolute left-0 right-0 flex flex-col gap-5 scroll-y" style={{ top: 'calc(76px + var(--safe-top))', bottom: 'calc(84px + var(--safe-bottom))' }}>
+        {/* Top controls */}
+        <div className="p-4 rounded-2xl border border-white/10 bg-white/5 mx-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2 w-full">
+              <div className="text-sm font-medium">Players</div>
+              <div className="inline-flex items-center gap-2">
+                {[4,5,6].map(n => (
+                  <button key={n} onClick={() => { setPlayers(n); try { localStorage.setItem('catan_players', String(n)); } catch {} }}
+                    className={`h-9 w-9 rounded-lg border text-sm border-white/30 bg-gradient-to-br ${players===n ? 'from-[#B6116B] to-[#3B1578]' : 'from-[#2E1371] to-[#21232F]'}`}
+                    style={{ boxShadow: (players!==n ? '-1px -1px 0px 0px rgb(7, 251, 211), 0px -1px 0px 0px rgb(7, 251, 211)' : '-1px -1px 0px 0px rgb(255, 83, 192), 0px -1px 0px 0px rgb(255, 83, 192)') }}>
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div />
+          </div>
+        </div>
+
+        {/* Board container */}
+        <div id="main-board-container" className="w-full p-4 relative overflow-hidden" style={{ height: (players===6 ? Math.min(1.05 * bodyvw, bodyvh) : (players===5 ? Math.min(1.35 * bodyvw, bodyvh) : Math.min(1.15 * bodyvw, bodyvh))), minHeight: (players===6 ? Math.min(1.05 * bodyvw, bodyvh) : (players===5 ? Math.min(1.35 * bodyvw, bodyvh) : Math.min(1.15 * bodyvw, bodyvh))) }}>
+          
+          <div className="absolute z-[2] w-full h-full top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+            <CatanBoard board={board} players={players} />
+          </div>
+        </div>
+
+        {/* Actions */}
+        <button onClick={onGenerate} aria-label="Generate Map"
+          className="h-10 min-h-10 mx-5 rounded-lg border border-white/20 bg-gradient-to-br from-[#B6116B] to-[#3B1578] flex items-center justify-center text-sm"
+          style={{ boxShadow: '-1px -1px 0px 0px rgb(255, 83, 192), 0px -1px 0px 0px rgb(255, 83, 192)' }}>
+          Generate Map
+        </button>
+      </div>
+    );
+  }
+
+  function NumberToken({ value }: { value: number }) {
+    const isHot = value === 6 || value === 8;
+    const pipCountMap: Record<number, number> = { 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 8: 5, 9: 4, 10: 3, 11: 2, 12: 1 };
+    const pips = pipCountMap[value] || 0;
+
+    const ringBackground = 'conic-gradient(from 0deg, #d6b253 0deg, #f5e3a1 90deg, #a77a2f 180deg, #f0d98c 270deg, #d6b253 360deg)';
+    const innerBackground = isHot
+      ? 'radial-gradient(circle at 30% 30%, #ff7373 0%, #b71c1c 65%, #7a0e0e 100%)'
+      : 'radial-gradient(circle at 30% 30%, #fff6d9 0%, #f2e2b6 60%, #d9c397 100%)';
+    const numberColor = isHot ? '#ffffff' : '#1a1a1a';
+    const pipColor = isHot ? '#ffffff' : '#1a1a1a';
+
+    return (
+      <div className="relative" style={{ width: 28, height: 28 }} aria-label={`token-${value}`}>
+        <div
+          className="absolute inset-0 rounded-full"
+          style={{
+            background: ringBackground,
+            boxShadow: '0 3px 4px rgba(0,0,0,0.4), inset 0 0 1px rgba(255,255,255,0.6)'
+          }}
+        />
+        <div
+          className="absolute rounded-full flex flex-col items-center justify-start"
+          style={{
+            left: 2.5,
+            top: 2.5,
+            right: 2.5,
+            bottom: 2.5,
+            background: innerBackground,
+            boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.35), 0 1px 0 rgba(255,255,255,0.3)'
+          }}
+        >
+          <div style={{ color: numberColor }} className="leading-none" >
+            <span className="text-[13px] font-extrabold">{value}</span>
+          </div>
+          <div className="flex gap-[1px] mt-[1px]" aria-hidden>
+            {Array.from({ length: pips }).map((_, i) => (
+              <span
+                key={i}
+                className="block rounded-full"
+                style={{
+                  width: 2,
+                  height: 2,
+                  background: pipColor,
+                  opacity: isHot ? 0.95 : 0.8,
+                  filter: 'drop-shadow(0 0.25px 0 rgba(0,0,0,0.3))'
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function CatanBoard({ board, players }: { board: Tile[][] | null; players: number }) {
+
+    const terrainColor: Record<string, string> = {
+      forest: '#1f7a1f',
+      pasture: '#68a61c',
+      fields: '#d2a842',
+      hills: '#b55324',
+      mountains: '#7b7f86',
+      desert: '#d7c58b',
+    };
+    const terrainImage: Record<string, string> = {
+      forest: lumberWebp || lumberPng,
+      pasture: sheepWebp || sheepPng,
+      fields: grainWebp || grainPng,
+      hills: brickWebp || brickPng,
+      mountains: oreWebp || orePng,
+      desert: desertWebp || desertPng,
+    };
+
+    if (!board) {
+      return (
+        <div className="w-full h-full flex items-center justify-center text-white/70 text-sm">
+          Click Generate Map to create a random board
+        </div>
+      );
+    }
+
+    // Flat-top (horizontal) resource hexes
+    const TILE_W = 82; // px (flat-top hex width)
+    const TILE_H = 72; // px (flat-top hex height)
+    const MAX_COLS = 5;
+    const dx = TILE_W * 0.75; // center-to-center horizontal for flat-top
+    const dy = TILE_H * 1.0;  // center-to-center vertical between rows for flat-top
+
+    const maxLen = players===6 ? Math.max(...columns6) : players===5 ? Math.max(...columns5) : 5;
+    const containerWidth = (players===6 ? TILE_W + dx * (7 - 1) : TILE_W + dx * (MAX_COLS - 1));
+    const containerHeight = TILE_H + dy * (maxLen - 1);
+
+    const wrapperRef = useRef<HTMLDivElement | null>(null);
+    const boardContainerRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+      const el = wrapperRef.current;
+      if (!el) return;
+
+      const adjust = () => {
+        const rect = el.getBoundingClientRect();
+        const dvw = rect.width;
+        const dvh = rect.height;
+        const desired = Math.min(0.9 * dvw / containerWidth, 0.9 * dvh / containerHeight);
+        if (boardContainerRef.current) {
+            if (isDesktop) {
+                (boardContainerRef.current as HTMLDivElement).style.zoom = String(0.8 * desired);
+            } else {
+                (boardContainerRef.current as HTMLDivElement).style.zoom = String(desired);
+            }
+        }
+      };
+
+      adjust();
+
+      const ro = new ResizeObserver(adjust);
+      ro.observe(el);
+      window.addEventListener('resize', adjust);
+      window.addEventListener('load', adjust);
+      return () => {
+        ro.disconnect();
+        window.removeEventListener('resize', adjust);
+        window.removeEventListener('load', adjust);
+      };
+    }, [board, containerWidth]);
+
+    return (
+      <div className="relative w-full h-full select-none" id="catan-map-container" ref={wrapperRef}>
+        <div
+          id="board-container"
+          ref={boardContainerRef}
+          className={`absolute left-1/2 top-1/2 -translate-x-1/2 ${isDesktop ? '-translate-y-[57%]' : '-translate-y-1/2'}`}
+          style={{ width: containerWidth, height: containerHeight + 45, transformOrigin: 'center' }}>
+            <div className="absolute z-[1] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" style={{ 
+                width: '105%',
+                height: '100%',
+                zIndex: 0,
+                clipPath: (players===5 ? 'polygon(50% 0%, 100% 20%, 100% 80%, 50% 100%, 0% 80%, 0% 20%)' : 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)'),
+                background: 'rgba(255, 255, 255, 0.2)',
+                filter: 'drop-shadow(0 2px 2px rgba(200, 200, 200, 0.5)) blur(2px)'
+            }} />
+          {/* Tile field centered inside the scaled box */}
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ width: containerWidth, height: containerHeight }}>
+          {(() => {
+            const isRow4 = players === 4 && board.length === 5 && board[0]?.length === 3 && board[1]?.length === 4 && board[2]?.length === 5;
+            const isCol = players !== 4 || !isRow4;
+            if (isCol) {
+              // Treat as column-shaped board (works for both 5p and any column data)
+              return board.map((col, cAbs) => {
+                const left = cAbs * dx;
+                const topStart = (maxLen - col.length) * (dy / 2);
+                return col.map((tile, i) => {
+                  const top = topStart + i * dy;
+                  return (
+                    <div key={`${cAbs}-${i}`} className="absolute" style={{ left, top, width: TILE_W, height: TILE_H, zIndex: 1 }}>
+                      <div className="w-full h-full" style={{ clipPath: 'polygon(0% 50%, 25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%)', backgroundColor: terrainColor[tile.terrain], backgroundImage: `url(${terrainImage[tile.terrain]})`, backgroundSize: '100% 100%', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }} />
+                      {tile.terrain !== 'desert' && tile.number !== null && (
+                        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[5]">
+                          <NumberToken value={tile.number} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              });
+            }
+            // 4p row-shaped: build columns from rows
+            const columns: Array<Array<{ r: number; j: number }>> = Array.from({ length: MAX_COLS }, () => []);
+            const startIndexByRow = [0, 1, 0, 0, 2];
+            for (let r = 0; r < board.length; r++) {
+              const row = board[r];
+              const rowStartAbs = startIndexByRow[r] ?? 0;
+              for (let j = 0; j < row.length; j++) {
+                const absC = rowStartAbs + j;
+                if (!columns[absC]) continue;
+                columns[absC].push({ r, j });
+              }
+            }
+            return columns.map((col, cAbs) => {
+              const left = cAbs * dx;
+              const topStart = (maxLen - col.length) * (dy / 2);
+              return col.map((pos, i) => {
+                const top = topStart + i * dy;
+                const tile = board[pos.r][pos.j];
+                return (
+                  <div key={`${pos.r}-${pos.j}`} className="absolute" style={{ left, top, width: TILE_W, height: TILE_H, zIndex: 1 }}>
+                    <div className="w-full h-full" style={{ clipPath: 'polygon(0% 50%, 25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%)', backgroundColor: terrainColor[tile.terrain], backgroundImage: `url(${terrainImage[tile.terrain]})`, backgroundSize: '100% 100%', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }} />
+                    {tile.terrain !== 'desert' && tile.number !== null && (
+                      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[5]">
+                        <NumberToken value={tile.number} />
+                      </div>
+                    )}
+                  </div>
+                );
+              });
+            });
+          })()}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="app-safe overflow-hidden bg-gradient-to-br from-[#2E1371] to-[#130B2B] text-white relative">
+        <div className="absolute w-[300px] h-[300px] left-[-132px] top-[178px]" style={{ background: (isDesktop ? 'transparent' : 'rgba(96, 255, 231, 0.4)'), filter: 'blur(100px)' }} />
+        <div className="absolute w-[300px] h-[300px] right-[-147px] top-[375px]" style={{ background: (isDesktop ? 'transparent' : 'rgba(255, 83, 192, 0.4)'), filter: 'blur(100px)' }} />
+
+        {/* Mobile/Portrait layout */}
+        {!isDesktop && (
+          <>
+            {/* Header */}
+            <div className="px-5 pt-6 pb-4">
+              <h1 className="h-9 flex items-center justify-between gap-2 select-none">
+                <button aria-label="Back" className="p-2 relative opacity-0">
+                  <div className="w-[32px] h-[32px] rounded-full flex items-center justify-center" style={{ background: 'rgba(255, 255, 255, 0.15)', backgroundBlendMode: 'overlay', backdropFilter: 'blur(20px)', boxShadow: '-1px -1px 0px 0px rgb(7, 251, 211), 0px -1px 0px 0px rgb(7, 251, 211)' }} >
+                    <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <path d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </div>
+                </button>
+                <span className="text-[20px] leading-none font-bold">
+                  <span className="bg-gradient-to-r from-[#CF9EFF] via-[#A071FF] to-[#CF9EFF] bg-clip-text text-transparent animate-gradient">Dice</span>
+                  <span className="text-white">&nbsp;Tracker</span>
+                </span>
+                <button aria-label="Options" className="p-2 relative" onClick={() => setMenuOpen(true)}>
+                  <div className="w-[32px] h-[32px] rounded-full flex items-center justify-center" style={{ background: 'rgba(255, 255, 255, 0.15)', backgroundBlendMode: 'overlay', backdropFilter: 'blur(20px)', boxShadow: '-1px -1px 0px 0px rgb(7, 251, 211), 0px -1px 0px 0px rgb(7, 251, 211)' }} >
+                    <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                      <rect x="4" y="6" width="16" height="2" rx="1" />
+                      <rect x="4" y="11" width="16" height="2" rx="1" />
+                      <rect x="4" y="16" width="16" height="2" rx="1" />
+                    </svg>
+                  </div>
+                </button>
+              </h1>
+            </div>
+
+            {/* Content */}
+            <CatanSetup desktop={false} />
+
+            {/* Footer nav */}
+            <div className="absolute bottom-0 left-0 right-0 z-[1]" style={{ boxSizing: 'border-box', height: 'calc(64px + var(--safe-bottom))' }}>
+              <div className="absolute inset-0 z-[1] overflow-hidden" style={{ background: 'rgba(255, 255, 255, 0.6)', backgroundBlendMode: 'overlay', boxSizing: 'border-box' }} >
+                <div className="absolute w-[200px] h-[231px] left-[-45px] top-[-148px] z-[4]" style={{ background: '#3B1578', filter: 'blur(40px)' }} />
+                <div className="absolute w-[200px] h-[231px] left-[50%] translate-x-[-50%] top-[12px] z-[2]" style={{ background: '#5172B3', filter: 'blur(60px)' }} />
+                <div className="absolute w-[200px] h-[231px] right-[4px] top-[17px] z-[3]" style={{ background: '#FF53C0', filter: 'blur(60px)' }} />
+              </div>
+              <div className="h-14 flex items-center justify-around z-[9] relative">
+                <button aria-label="Home" className="p-2 relative h-[40px] w-[40px]">
+                  <LiquidGlassCard className="absolute w-[64px] h-[64px] rounded-full bottom-[28px] left-[-20px] flex items-center justify-center" style={{ borderRadius: '50%'}} >
+                    <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor" aria-hidden >
+                      <path d="M12 3.2 2.8 11a1 1 0 0 0 .65 1.76H5v7.24c0 .56.45 1 1 1h4.5V15h3V21h4.5c.55 0 1-.44 1-1V12.76h1.55a1 1 0 0 0 .65-1.76L12 3.2Z" />
+                    </svg>
+                  </LiquidGlassCard>
+                </button>
+                <Link to="/tracker" aria-label="Tracker" className="p-2 relative h-[40px] w-[40px]">
+                  <svg className="w-6 h-6 text-white" viewBox="0 0 100 100" aria-hidden>
+                    <defs>
+                      <mask id="pips-mask-footer-tracker">
+                        <rect x="0" y="0" width="100" height="100" fill="white" />
+                        <circle cx="25" cy="25" r="9" fill="black" />
+                        <circle cx="75" cy="25" r="9" fill="black" />
+                        <circle cx="50" cy="50" r="9" fill="black" />
+                        <circle cx="25" cy="75" r="9" fill="black" />
+                        <circle cx="75" cy="75" r="9" fill="black" />
+                      </mask>
+                    </defs>
+                    <rect x="8" y="8" width="84" height="84" rx="12" fill="currentColor" mask="url(#pips-mask-footer-tracker)" />
+                    <rect x="8" y="8" width="84" height="84" rx="12" fill="none" stroke="currentColor" strokeOpacity="0.25" strokeWidth="4" />
+                  </svg>
+                </Link>
+                <Link to="/profile" aria-label="Profile" className="p-2 relative h-[40px] w-[40px]">
+                  <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor" aria-hidden >
+                    <path d="M12 3.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9Z" />
+                    <path d="M4 20.5c0-4.142 3.582-7.5 8-7.5s8 3.358 8 7.5V22H4v-1.5Z" />
+                  </svg>
+                </Link>
+              </div>
+            </div>
+
+            {/* Right Sidebar Drawer */}
+            <div className={`absolute inset-0 z-[60] transition-opacity ${menuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} onClick={() => setMenuOpen(false)} aria-hidden={!menuOpen} />
+            <div className={`absolute right-0 top-0 bottom-0 z-[61] w-[320px] max-w-[85vw] bg-gradient-to-b from-[#1B0F3E] to-[#120A28] border-l border-white/10 transition-transform duration-300 ${menuOpen ? 'translate-x-0' : 'translate-x-full'}`} role="dialog" aria-modal="true">
+              <div className="h-full flex flex-col" style={{ paddingTop: 'var(--safe-top)', paddingBottom: 'var(--safe-bottom)' }}>
+                <div className="p-5 border-b border-white/10 flex items-center gap-3">
+                  <svg className="w-10 h-10 text-white" viewBox="0 0 100 100" aria-hidden>
+                    <defs>
+                      <mask id="pips-mask-settings-home">
+                        <rect x="0" y="0" width="100" height="100" fill="white" />
+                        <circle cx="25" cy="25" r="9" fill="black" />
+                        <circle cx="75" cy="25" r="9" fill="black" />
+                        <circle cx="50" cy="50" r="9" fill="black" />
+                        <circle cx="25" cy="75" r="9" fill="black" />
+                        <circle cx="75" cy="75" r="9" fill="black" />
+                      </mask>
+                    </defs>
+                    <rect x="8" y="8" width="84" height="84" rx="12" fill="currentColor" mask="url(#pips-mask-settings-home)" />
+                    <rect x="8" y="8" width="84" height="84" rx="12" fill="none" stroke="currentColor" strokeOpacity="0.25" strokeWidth="4" />
+                  </svg>
+                  <div className="text-lg font-semibold">Dice <span className="text-white/80">Tracker</span></div>
+                  <button className="ml-auto p-2" aria-label="Close" onClick={() => setMenuOpen(false)}>
+                    <svg className="w-5 h-5 text-white/80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                  </button>
+                </div>
+                <div className="p-5 space-y-4 text-sm flex-1 flex flex-col min-h-0">
+                  <div className="text-white/70">Current game</div>
+                  <div className="flex items-center gap-2">
+                    <div className="px-3 py-2 rounded-md bg-white/5 border border-white/10 text-white/90 flex-1 truncate">{gameName}</div>
+                    <button aria-label="Rename game" className="h-9 w-9 rounded-md border border-white/10 bg-white/5 hover:bg-white/10 flex items-center justify-center" onClick={() => {
+                      const name = prompt('Rename current game', gameName || ''); if (name && name.trim()) { setGameName(name.trim()); const id = storage.getCurrentId(); if (id) { storage.renameGame(id, name.trim()); setGamesVersion(v=>v+1);} }
+                    }}>
+                      <svg className="w-4 h-4 text-white/80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+                    </button>
+                  </div>
+                  <div className="pt-2">
+                    <button onClick={startNewGame} className="w-full h-10 rounded-md border border-white/15 bg-gradient-to-br from-[#B6116B] to-[#3B1578] text-white text-sm" style={{ boxShadow: '-1px -1px 0px 0px rgb(255, 83, 192), 0px -1px 0px 0px rgb(255, 83, 192)' }}>New game</button>
+                  </div>
+                  <div className="mt-4 flex-1 flex flex-col min-h-0">
+                    <div className="text-white/70 mb-2">Load game</div>
+                    <div className="space-y-2 flex-1 overflow-auto pr-1 min-h-0">
+                      {recentGames.map(g => (
+                        <div key={g.id} className="w-full rounded-md border border-white/10 bg-white/5 hover:bg-white/10 px-3 py-2 flex items-center gap-2">
+                          <button onClick={() => loadGame(g.id)} className="flex-1 text-left">
+                            <div className="text-white/90 truncate">{g.name}</div>
+                            <div className="text-[10px] text-white/60">{new Date(g.updatedAt).toLocaleString()}</div>
+                          </button>
+                          <button aria-label="Rename game" className="h-8 w-8 rounded-md border border-white/10 bg-white/5 hover:bg-white/10 flex items-center justify-center" onClick={() => { const name = prompt('Rename game', g.name); if (name && name.trim()) { storage.renameGame(g.id, name.trim()); if (storage.getCurrentId()===g.id) setGameName(name.trim()); setGamesVersion(v=>v+1);} }}>
+                            <svg className="w-4 h-4 text-white/80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+                          </button>
+                          <button aria-label="Delete game" className="h-8 w-8 rounded-md border border-white/10 bg-white/5 hover:bg-white/10 flex items-center justify-center" onClick={() => { if (confirm('Delete this game permanently?')) { storage.deleteGame(g.id); setGamesVersion(v=>v+1); const cur = storage.getCurrentId(); if (cur) { /* stay here */ } else { const list = storage.getGames().sort((a,b)=>b.updatedAt-a.updatedAt); const next = list[0]; if (next) { storage.setCurrentId(next.id); setGameName(next.name);} else { const meta = storage.createGame(new Date().toLocaleString()); setGameName(meta.name);} } } }}>
+                            <svg className="w-4 h-4 text-white/80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
+                          </button>
+                        </div>
+                      ))}
+                      {recentGames.length === 0 && (<div className="text-xs text-white/60">No saved games yet</div>)}
+                    </div>
+                  </div>
+                </div>
+                <div className="p-5 border-t border-white/10" style={{ paddingBottom: 'max(var(--safe-bottom), 1.25rem)' }}>
+                  {isAuthenticated ? (
+                      <div className="w-full flex flex-col gap-3">
+                        <div className="w-full flex items-center gap-3">
+                          <img src={user?.imageUrl || ''} alt="avatar" className="w-9 h-9 rounded-full bg-white/20" loading="eager" decoding="async" referrerPolicy="no-referrer" crossOrigin="anonymous" />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm truncate">{user?.name}</div>
+                            <div className="text-xs text-white/70 truncate">{user?.email}</div>
+                          </div>
+                          <button onClick={signOut} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Sign out</button>
+                        </div>
+                        <div className="w-full grid grid-cols-2 gap-2">
+                          <button onClick={handleBackup} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Backup</button>
+                          <button onClick={handleRestore} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Restore</button>
+                        </div>
+                        <div className="w-full flex items-center justify-between text-xs text-white/80">
+                          <div className="flex flex-col"><span>Last backup:</span><span>{lastBackupAt ? new Date(lastBackupAt).toLocaleString() : '—'}</span></div>
+                          <label className="inline-flex items-center gap-1 cursor-pointer">
+                            <input type="checkbox" checked={autoBackupEnabled} onChange={e=>setAutoBackupEnabled(e.target.checked)} />
+                            Auto backup
+                          </label>
+                        </div>
+                        <div className="w-full grid grid-cols-2 gap-2">
+                          <button onClick={handleExportFile} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Export file</button>
+                          <label className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs flex items-center justify-center cursor-pointer">
+                            Import file
+                            <input type="file" accept="application/json" onChange={handleImportFile} className="hidden" />
+                          </label>
+                        </div>
+                      </div>
+                    ) : (
+                      <GoogleSignInButton onClick={signIn} variant="full" className="w-full" aria-label="Sign in with Google" />
+                    )}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Desktop/Landscape layout */}
+        {isDesktop && (
+          <div className="relative" style={{ height: '100dvh', paddingTop: 'var(--safe-top)', paddingBottom: 'var(--safe-bottom)' }}>
+            <div className="absolute inset-0" aria-hidden />
+            <div className="relative w-full h-full flex">
+              {/* Sidebar */}
+              <aside className="sticky top-0 h-screen overflow-y-auto shrink-0 w-[240px] px-4 py-6 flex flex-col justify-between z-[10]">
+                <div>
+                  <div className="flex items-center gap-3 mb-8">
+                    <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center">
+                      <svg className="w-10 h-10 text-white" viewBox="0 0 100 100" aria-hidden>
+                        <defs>
+                          <mask id="pips-mask-sidebar-logo">
+                            <rect x="0" y="0" width="100" height="100" fill="white" />
+                            <circle cx="25" cy="25" r="9" fill="black" />
+                            <circle cx="75" cy="25" r="9" fill="black" />
+                            <circle cx="50" cy="50" r="9" fill="black" />
+                            <circle cx="25" cy="75" r="9" fill="black" />
+                            <circle cx="75" cy="75" r="9" fill="black" />
+                          </mask>
+                        </defs>
+                        <rect x="8" y="8" width="84" height="84" rx="12" fill="currentColor" mask="url(#pips-mask-sidebar-logo)" />
+                        <rect x="8" y="8" width="84" height="84" rx="12" fill="none" stroke="currentColor" strokeOpacity="0.25" strokeWidth="4" />
+                      </svg>
+                    </div>
+                    <div className="flex flex-col">
+                      <h1 className="text-white text-2xl font-bold leading-tight">
+                      <span className="bg-gradient-to-r from-[#CF9EFF] via-[#A071FF] to-[#CF9EFF] bg-clip-text text-transparent animate-gradient">Dice</span><span className="text-white">&nbsp;Tracker</span>
+                      </h1>
+                    </div>
+                  </div>
+                  <hr className="my-4 border-white/10" />
+                  <nav className="flex flex-col gap-2 text-sm mt-2" id="main-nav">
+                    <Link to="/home" className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-[#f9fafb] text-[#2E1371]">Map Generator</Link>
+                    <Link to="/tracker" className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-white hover:bg-white/20">Dice Tracker</Link>
+                    <Link to="/profile" className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-white hover:bg-white/20">Profile</Link>
+                  </nav>
+                </div>
+                <div>
+                  <hr className="my-4 border-white/10" />
+                  {isAuthenticated ? (
+                    <div className="text-white">
+                      <div className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-white/10">
+                        <img src={user?.imageUrl || ''} alt="avatar" className="w-10 h-10 rounded-full bg-white/20" loading="eager" decoding="async" referrerPolicy="no-referrer" crossOrigin="anonymous" />
+                        <div className="min-w-0">
+                          <p className="font-semibold truncate max-w-[18ch]">{user?.name || ''}</p>
+                          <p className="text-xs text-white/70 truncate max-w-[22ch]">{user?.email || ''}</p>
+                        </div>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <button onClick={handleBackup} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Backup</button>
+                        <button onClick={handleRestore} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Restore</button>
+                        <button onClick={handleExportFile} className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs col-span-1">Export</button>
+                        <label className="h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs flex items-center justify-center cursor-pointer col-span-1">
+                          Import
+                          <input type="file" accept="application/json" onChange={handleImportFile} className="hidden" />
+                        </label>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between text-xs text-white/80">
+                        <div className="flex flex-col"><span>Last backup:</span><span>{lastBackupAt ? formatBackup(lastBackupAt) : '—'}</span></div>
+                        <label className="inline-flex items-center gap-1 cursor-pointer">
+                          <input type="checkbox" checked={autoBackupEnabled} onChange={e=>setAutoBackupEnabled(e.target.checked)} />
+                          Auto backup
+                        </label>
+                      </div>
+                      <div className="mt-3">
+                        <button onClick={signOut} className="w-full h-9 px-3 rounded-md border border-white/15 bg-white/10 text-xs">Sign out</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <GoogleSignInButton onClick={signIn} variant="full" className="w-full" aria-label="Sign in with Google" />
+                  )}
+                </div>
+              </aside>
+              {/* Main body (white panel) */}
+              <main className="flex-1 p-0 m-2 overflow-hidden min-h-0 relative" style={{ borderRadius: '16px', backgroundColor: 'rgb(249 250 251 / var(--tw-bg-opacity, 1))', zIndex: 1 }}>
+                {/* Glow background similar to sample */}
+                <div className="absolute -left-[200px] -bottom-[0px] h-[600px] w-[600px] rounded-full blur-[100px] will-change-[filter] [transform:translateZ(0)] pointer-events-none"
+                  style={{ background: (!isDesktop ? 'radial-gradient(circle, rgb(134 0 255 / 1) 0%, transparent 70%)' : 'transparent') }} />
+
+                <div className="w-full h-full rounded-[16px] overflow-hidden">
+                    <div className="z-[-1]" style={{ position: 'absolute', inset: 0 }}>
+                <Suspense fallback={null}>
+                <Iridescence color={[100, 200, 255]} className='absolute inset-0' />
+              </Suspense>
+              <LiquidGlassCard distortion={0.5} thickness={0.5}
+                className="pointer-events-none absolute w-full h-full z-[0] left-0 top-0" 
+                style={{ borderRadius: '0px', width: 'calc(100% + 4rem)', height: 'calc(100% + 4rem)', left: '-2rem', top: '-2rem' }}>
+                <div />
+              </LiquidGlassCard>
+              </div>
+                  <header className="p-6">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h1 className="text-3xl font-bold text-gray-900">Map Generator</h1>
+                        <p className="mt-2 text-gray-700">Generate balanced Catan boards for 4/5/6 players.</p>
+                      </div>
+                      {/* Right: Controls */}
+                        <div className="flex flex-row gap-2">
+                            <div className="text-sm font-semibold text-gray-900 justify-center items-center flex">Players</div>
+                            <div className="inline-flex items-center gap-2">
+                                {[4,5,6].map(n => (
+                                <button key={n} onClick={() => onHeaderSelectPlayers(n)}
+                                    className={`h-9 w-9 rounded-lg border text-sm ${uiPlayers===n ? 'border-purple-600 bg-purple-600 text-white' : 'border-gray-300 bg-white text-gray-900 hover:bg-gray-100'}`}>
+                                    {n}
+                                </button>
+                                ))}
+                            </div>
+                            <span className="w-20" />
+                            <button onClick={onHeaderGenerate} className="w-full h-[42px] rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-md p-2">Generate Map</button>
+                        </div>
+                    </div>
+                  </header>
+                  <div className={isDesktop ? 'relative h-full w-full' : 'relative overflow-hidden min-h-[80vh] rounded-2xl border border-gray-200 bg-white'}>
+                    <CatanSetup desktop={true} />
+                  </div>
+                </div>
+              </main>
+            </div>
+          </div>
+        )}
+    </div>
+  );
+};
+
+export default Home5;
